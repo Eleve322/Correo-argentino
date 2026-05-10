@@ -446,6 +446,9 @@ export function buildShipmentRequest(
   const streetName = addressMatch ? addressMatch[1] : input.recipient.address1;
   const streetNumber = addressMatch ? addressMatch[2] : "S/N";
 
+  // Estimate dimensions if not provided, based on weight
+  const dims = input.dimensions ?? estimateDimensionsFromWeight(input.weightGrams);
+
   return {
     extOrderId: input.orderName.replace("#", ""),
     orderNumber: input.orderName,
@@ -485,9 +488,24 @@ export function buildShipmentRequest(
       },
       weight: Math.max(1, Math.round(input.weightGrams)),
       declaredValue: Math.round(input.declaredValue * 100) / 100,
-      height: input.dimensions?.height ?? 20,
-      length: input.dimensions?.length ?? 40,
-      width: input.dimensions?.width ?? 30,
+      height: dims.height,
+      length: dims.length,
+      width: dims.width,
     },
   };
+}
+
+/**
+ * Estimate package dimensions from weight alone (for shipment import).
+ * Calibrated for shoe/apparel e-commerce.
+ */
+function estimateDimensionsFromWeight(
+  weightGrams: number
+): { height: number; width: number; length: number } {
+  if (weightGrams <= 300)  return { height: 5,  width: 15, length: 20 }; // socks, accessories
+  if (weightGrams <= 600)  return { height: 8,  width: 20, length: 25 }; // small item
+  if (weightGrams <= 1200) return { height: 13, width: 22, length: 35 }; // 1 shoe box
+  if (weightGrams <= 2500) return { height: 26, width: 22, length: 35 }; // 2 shoe boxes
+  if (weightGrams <= 3500) return { height: 30, width: 25, length: 38 }; // 3 items
+  return { height: 35, width: 30, length: 42 };                          // 4+ items
 }

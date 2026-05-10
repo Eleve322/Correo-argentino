@@ -147,18 +147,27 @@ export async function POST(request: Request) {
           }
         }
 
-        // Build Shopify rates — only Clásico + Sucursal for now
+        // Build Shopify rates — Clásico only (no Express)
         for (const rate of miCorreoRates) {
           const isExpress = rate.productName?.toLowerCase().includes("expres");
+
+          // Skip Express rates
+          if (isExpress) continue;
+
           const isHomeDelivery = rate.deliveredType === "D";
-
-          // Skip Express and home delivery
-          if (isExpress || isHomeDelivery) continue;
-
           const timeDesc = `${rate.deliveryTimeMin}-${rate.deliveryTimeMax} días hábiles`;
           const priceInCents = Math.round(rate.price * 100);
 
-          if (closestAgencies.length > 0) {
+          if (isHomeDelivery) {
+            // Home delivery: single rate
+            rates.push({
+              service_name: `Correo Argentino — Envío a domicilio`,
+              service_code: `correo-argentino-domicilio`,
+              total_price: priceInCents,
+              currency: currency || "ARS",
+              description: timeDesc,
+            });
+          } else if (closestAgencies.length > 0) {
             // Branch pickup: one rate per closest agency
             for (const agency of closestAgencies) {
               rates.push({

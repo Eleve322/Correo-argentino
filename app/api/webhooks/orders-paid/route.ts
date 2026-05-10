@@ -66,11 +66,21 @@ export async function POST(request: Request) {
       0
     );
 
-    // 6. Determine delivery type from shipping line
-    const shippingTitle = order.shipping_lines?.[0]?.title?.toLowerCase() || "";
-    const deliveryType: "D" | "S" = shippingTitle.includes("sucursal")
+    // 6. Determine delivery type and agency code from shipping line
+    const shippingLine = order.shipping_lines?.[0];
+    const shippingTitle = shippingLine?.title?.toLowerCase() || "";
+    const shippingCode = shippingLine?.code || "";
+    const deliveryType: "D" | "S" = shippingTitle.includes("suc.")
       ? "S"
       : "D";
+
+    // Extract agency code from service_code: "correo-argentino-sucursal-B0107" → "B0107"
+    let agencyCode: string | undefined;
+    if (deliveryType === "S") {
+      const codeMatch = shippingCode.match(/correo-argentino-sucursal-(?:clásico-|clasico-)?(.+)/i);
+      agencyCode = codeMatch?.[1];
+      console.log(`📍 Branch pickup: agency code = ${agencyCode || "unknown"}`);
+    }
 
     // 7. Build and import shipment to MiCorreo
     const addr = order.shipping_address;
@@ -90,6 +100,7 @@ export async function POST(request: Request) {
       weightGrams: Math.max(totalWeightGrams, 500),
       declaredValue: parseFloat(order.total_price),
       deliveryType,
+      agencyCode,
     });
 
     console.log(`Importing shipment for order ${order.name}...`);

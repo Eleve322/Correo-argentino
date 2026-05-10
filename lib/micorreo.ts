@@ -433,6 +433,8 @@ export interface ShopifyToShipmentInput {
   deliveryType?: "D" | "S";
   /** Branch code (required for deliveryType "S") */
   agencyCode?: string;
+  /** Number of items (for dimension estimation) */
+  itemCount?: number;
 }
 
 /**
@@ -446,8 +448,8 @@ export function buildShipmentRequest(
   const streetName = addressMatch ? addressMatch[1] : input.recipient.address1;
   const streetNumber = addressMatch ? addressMatch[2] : "S/N";
 
-  // Estimate dimensions if not provided, based on weight
-  const dims = input.dimensions ?? estimateDimensionsFromWeight(input.weightGrams);
+  // Estimate dimensions if not provided, based on weight and item count
+  const dims = input.dimensions ?? estimateDimensionsFromWeight(input.weightGrams, input.itemCount || 1);
 
   return {
     extOrderId: input.orderName.replace("#", ""),
@@ -496,16 +498,36 @@ export function buildShipmentRequest(
 }
 
 /**
- * Estimate package dimensions from weight alone (for shipment import).
- * Calibrated for shoe/apparel e-commerce.
+ * Estimate package dimensions optimized for minimal volumetric weight.
+ * Uses avg weight per item to distinguish clothing from shoes.
+ *
+ * RULES:
+ *   - Clothing height NEVER exceeds 5cm
+ *   - Shoes max 10cm height
+ *   - Minimize dimensions to reduce volumetric weight charges
  */
 function estimateDimensionsFromWeight(
-  weightGrams: number
+  weightGrams: number,
+  itemCount: number = 1
 ): { height: number; width: number; length: number } {
-  if (weightGrams <= 300)  return { height: 5,  width: 15, length: 20 }; // socks, accessories
-  if (weightGrams <= 600)  return { height: 8,  width: 20, length: 25 }; // small item
-  if (weightGrams <= 1200) return { height: 13, width: 22, length: 35 }; // 1 shoe box
-  if (weightGrams <= 2500) return { height: 26, width: 22, length: 35 }; // 2 shoe boxes
-  if (weightGrams <= 3500) return { height: 30, width: 25, length: 38 }; // 3 items
-  return { height: 35, width: 30, length: 42 };                          // 4+ items
+  const avgWeight = itemCount > 0 ? weightGrams / itemCount : weightGrams;
+
+  // === CLOTHING / ACCESSORIES (≤400g per item) ===
+  if (avgWeight <= 400) {
+    if (weightGrams <= 200) return { height: 3, width: 15, length: 20 };
+    if (itemCount <= 1)     return { height: 4, width: 25, length: 30 };
+    if (itemCount <= 2)     return { height: 4, width: 25, length: 30 };
+    return                         { height: 5, width: 25, length: 35 };
+  }
+
+  // === SHOES (400-900g per item) ===
+  if (avgWeight <= 900) {
+    if (itemCount <= 1) return { height: 10, width: 22, length: 33 };
+    if (itemCount <= 2) return { height: 10, width: 30, length: 33 };
+    return                     { height: 15, width: 30, length: 35 };
+  }
+
+  // === HEAVY ITEMS ===
+  if (itemCount <= 1) return { height: 13, width: 25, length: 35 };
+  return                     { height: 18, width: 30, length: 38 };
 }

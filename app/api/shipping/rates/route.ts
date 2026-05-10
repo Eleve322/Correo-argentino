@@ -95,44 +95,61 @@ function agencyLabel(agency: MiCorreoAgency): string {
 }
 
 /**
- * Estimate package dimensions based on total weight and item quantity.
- * Calibrated for shoe/apparel e-commerce:
- *   - Small accessory (socks, etc.): ~20x15x5 cm
- *   - 1 shoe box: ~35x22x13 cm
- *   - 2 shoe boxes: ~35x22x26 cm
- *   - 3+ items: scale up proportionally
+ * Estimate package dimensions optimized for minimal volumetric weight.
+ * Uses average weight per item to distinguish product types:
+ *   - Clothing/accessories (≤400g/item): flat, max 5cm height
+ *   - Shoes (400-900g/item): box, max 10cm height
+ *   - Heavy items (>900g/item): larger box
+ *
+ * RULES:
+ *   - Clothing height NEVER exceeds 5cm (remeras dobladas = ~1cm each)
+ *   - Shoes height max 10cm for 1 pair
+ *   - Always minimize dimensions to reduce volumetric weight charges
  */
 function estimatePackageDimensions(
   weightGrams: number,
   itemCount: number
 ): { height: number; width: number; length: number } {
-  // Very light items (accessories, socks, small items)
-  if (weightGrams <= 300) {
-    return { height: 5, width: 15, length: 20 };
+  const avgWeightPerItem = itemCount > 0 ? weightGrams / itemCount : weightGrams;
+
+  // === CLOTHING / ACCESSORIES (≤400g per item) ===
+  // T-shirts, socks, boxers, caps, etc. — flat items
+  if (avgWeightPerItem <= 400) {
+    // Socks/small accessories
+    if (weightGrams <= 200) {
+      return { height: 3, width: 15, length: 20 };
+    }
+    // Cap / single accessory
+    if (weightGrams <= 500 && itemCount <= 1) {
+      return { height: 5, width: 20, length: 20 };
+    }
+    // 1-2 clothing items
+    if (itemCount <= 2) {
+      return { height: 4, width: 25, length: 30 };
+    }
+    // 3+ clothing items — still max 5cm height
+    return { height: 5, width: 25, length: 35 };
   }
 
-  // Light item (1 accessory or small product)
-  if (weightGrams <= 600) {
-    return { height: 8, width: 20, length: 25 };
+  // === SHOES (400-900g per item) ===
+  if (avgWeightPerItem <= 900) {
+    // 1 pair of shoes
+    if (itemCount <= 1) {
+      return { height: 10, width: 22, length: 33 };
+    }
+    // 2 pairs — side by side, not stacked
+    if (itemCount <= 2) {
+      return { height: 10, width: 30, length: 33 };
+    }
+    // 3+ pairs
+    return { height: 15, width: 30, length: 35 };
   }
 
-  // 1 pair of shoes (~700-1200g)
-  if (itemCount <= 1 || weightGrams <= 1200) {
-    return { height: 13, width: 22, length: 35 };
+  // === HEAVY ITEMS (boots, >900g per item) ===
+  if (itemCount <= 1) {
+    return { height: 13, width: 25, length: 35 };
   }
-
-  // 2 pairs of shoes (~1200-2400g)
-  if (itemCount <= 2 || weightGrams <= 2500) {
-    return { height: 26, width: 22, length: 35 };
-  }
-
-  // 3 items (~2500-3500g)
-  if (itemCount <= 3 || weightGrams <= 3500) {
-    return { height: 30, width: 25, length: 38 };
-  }
-
-  // 4+ items or heavy orders
-  return { height: 35, width: 30, length: 42 };
+  return { height: 18, width: 30, length: 38 };
 }
 
 export async function POST(request: Request) {

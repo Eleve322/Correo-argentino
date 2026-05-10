@@ -172,7 +172,7 @@ export async function POST(request: Request) {
           (sum, li) => sum + li.node.quantity,
           0
         );
-        const estimatedWeight = Math.max(totalItems * 800, 500); // ~800g per item
+        const estimatedWeight = Math.max(totalItems * 400, 200); // ~400g per item (conservative avg)
 
         const addr = order.shippingAddress;
         const shipmentData = buildShipmentRequest({
@@ -192,6 +192,7 @@ export async function POST(request: Request) {
           declaredValue: parseFloat(order.totalPriceSet.shopMoney.amount),
           deliveryType,
           agencyCode,
+          itemCount: totalItems,
         });
 
         const result = await importShipment(shipmentData);

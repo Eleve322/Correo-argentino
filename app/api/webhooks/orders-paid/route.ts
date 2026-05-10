@@ -60,9 +60,13 @@ export async function POST(request: Request) {
       });
     }
 
-    // 5. Calculate total weight
+    // 5. Calculate total weight and item count
     const totalWeightGrams = order.line_items.reduce(
       (sum, item) => sum + item.grams * item.quantity,
+      0
+    );
+    const totalItemCount = order.line_items.reduce(
+      (sum, item) => sum + item.quantity,
       0
     );
 
@@ -97,10 +101,11 @@ export async function POST(request: Request) {
         provinceCode: addr.province_code,
         zip: addr.zip,
       },
-      weightGrams: Math.max(totalWeightGrams, 500),
+      weightGrams: Math.max(totalWeightGrams, 200),
       declaredValue: parseFloat(order.total_price),
       deliveryType,
       agencyCode,
+      itemCount: totalItemCount,
     });
 
     console.log(`Importing shipment for order ${order.name}...`);

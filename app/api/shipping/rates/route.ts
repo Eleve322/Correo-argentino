@@ -94,6 +94,47 @@ function agencyLabel(agency: MiCorreoAgency): string {
   return `Suc. ${agency.name}${addr ? ` (${addr})` : ""}`;
 }
 
+/**
+ * Estimate package dimensions based on total weight and item quantity.
+ * Calibrated for shoe/apparel e-commerce:
+ *   - Small accessory (socks, etc.): ~20x15x5 cm
+ *   - 1 shoe box: ~35x22x13 cm
+ *   - 2 shoe boxes: ~35x22x26 cm
+ *   - 3+ items: scale up proportionally
+ */
+function estimatePackageDimensions(
+  weightGrams: number,
+  itemCount: number
+): { height: number; width: number; length: number } {
+  // Very light items (accessories, socks, small items)
+  if (weightGrams <= 300) {
+    return { height: 5, width: 15, length: 20 };
+  }
+
+  // Light item (1 accessory or small product)
+  if (weightGrams <= 600) {
+    return { height: 8, width: 20, length: 25 };
+  }
+
+  // 1 pair of shoes (~700-1200g)
+  if (itemCount <= 1 || weightGrams <= 1200) {
+    return { height: 13, width: 22, length: 35 };
+  }
+
+  // 2 pairs of shoes (~1200-2400g)
+  if (itemCount <= 2 || weightGrams <= 2500) {
+    return { height: 26, width: 22, length: 35 };
+  }
+
+  // 3 items (~2500-3500g)
+  if (itemCount <= 3 || weightGrams <= 3500) {
+    return { height: 30, width: 25, length: 38 };
+  }
+
+  // 4+ items or heavy orders
+  return { height: 35, width: 30, length: 42 };
+}
+
 export async function POST(request: Request) {
   try {
     const body = (await request.json()) as ShopifyCarrierRequest;
@@ -104,12 +145,14 @@ export async function POST(request: Request) {
       (sum, item) => sum + item.grams * item.quantity,
       0
     );
+    const totalQuantity = items.reduce((sum, item) => sum + item.quantity, 0);
 
     // Use a minimum weight if products don't have weight set
-    const effectiveWeight = Math.max(totalWeightGrams, 500);
+    const effectiveWeight = Math.max(totalWeightGrams, 200);
 
-    // Default dimensions for the package (cm)
-    const defaultDimensions = { height: 15, width: 30, length: 40 };
+    // Estimate package dimensions based on weight and quantity
+    // Shoe box ~35x22x13cm (~1kg), accessories ~20x15x5cm (~200g)
+    const estimatedDimensions = estimatePackageDimensions(effectiveWeight, totalQuantity);
 
     let rates: ShopifyCarrierResponse["rates"] = [];
 
@@ -127,7 +170,7 @@ export async function POST(request: Request) {
           postalCodeDestination: destination.postal_code,
           dimensions: {
             weight: effectiveWeight,
-            ...defaultDimensions,
+            ...estimatedDimensions,
           },
         });
 

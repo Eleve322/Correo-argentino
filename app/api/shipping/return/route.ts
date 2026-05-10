@@ -85,7 +85,6 @@ export async function POST(request: Request) {
         lineItems: {
           edges: { node: { title: string; quantity: number } }[];
         };
-        customer: { email: string; phone: string | null } | null;
       } | null;
     }>(`query GetOrder($id: ID!) {
       node(id: $id) {
@@ -99,7 +98,6 @@ export async function POST(request: Request) {
           lineItems(first: 20) {
             edges { node { title quantity } }
           }
-          customer { email phone }
         }
       }
     }`, { id: gid });
@@ -167,9 +165,9 @@ export async function POST(request: Request) {
       // SENDER = Customer (drops off at branch)
       sender: {
         name: `${custAddr.firstName} ${custAddr.lastName}`.trim(),
-        phone: custAddr.phone || order.customer?.phone || null,
+        phone: custAddr.phone || null,
         cellPhone: null,
-        email: order.email || order.customer?.email || null,
+        email: order.email || null,
         originAddress: {
           streetName: custStreetName,
           streetNumber: custStreetNumber,

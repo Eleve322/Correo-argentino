@@ -59,7 +59,7 @@ export default function Dashboard() {
     }
   }
 
-  async function handleSync() {
+  async function handleSync(force = false) {
     setSyncStatus("loading");
     setSyncResult(null);
 
@@ -67,7 +67,7 @@ export default function Dashboard() {
       const res = await fetch("/api/shipping/sync-orders", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ daysBack: 1 }),
+        body: JSON.stringify({ daysBack: 1, force }),
       });
       const data = await res.json();
       setSyncResult(data);
@@ -151,16 +151,34 @@ export default function Dashboard() {
             &quot;No preparado&quot; y no se hayan sincronizado aún.
           </p>
 
-          <button
-            onClick={handleSync}
-            disabled={syncStatus === "loading"}
-            style={{
-              ...styles.btnSecondary,
-              opacity: syncStatus === "loading" ? 0.6 : 1,
-            }}
-          >
-            {syncStatus === "loading" ? "Sincronizando..." : "Sincronizar pedidos de hoy"}
-          </button>
+          <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+            <button
+              onClick={() => handleSync(false)}
+              disabled={syncStatus === "loading"}
+              style={{
+                ...styles.btnSecondary,
+                opacity: syncStatus === "loading" ? 0.6 : 1,
+              }}
+            >
+              {syncStatus === "loading" ? "Sincronizando..." : "Sincronizar no preparados"}
+            </button>
+            <button
+              onClick={() => handleSync(true)}
+              disabled={syncStatus === "loading"}
+              style={{
+                ...styles.btnSmall,
+                opacity: syncStatus === "loading" ? 0.6 : 1,
+                marginTop: 0,
+                padding: "10px 16px",
+                fontSize: "13px",
+                backgroundColor: "#3a2a00",
+                color: "#ffd700",
+                border: "1px solid #5a4a10",
+              }}
+            >
+              🔁 Forzar re-sync
+            </button>
+          </div>
 
           {syncStatus === "done" && syncResult && !syncResult.error && (
             <div style={styles.syncResults}>

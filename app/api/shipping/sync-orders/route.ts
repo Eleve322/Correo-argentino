@@ -18,6 +18,7 @@ export async function POST(request: Request) {
   try {
     const body = await request.json().catch(() => ({}));
     const daysBack = body.daysBack || 1;
+    const forceReimport = body.force === true;
 
     // 1. Calculate date range
     const sinceDate = new Date();
@@ -128,7 +129,7 @@ export async function POST(request: Request) {
     const results: SyncResult[] = [];
 
     for (const order of caOrders) {
-      // Check if already imported via metafield
+      // Check if already imported via metafield (skip if force=true)
       const alreadyImported = order.metafields.edges.some(
         (mf) => mf.node.namespace === "correo_argentino" && mf.node.key === "imported_at"
       );
@@ -136,7 +137,7 @@ export async function POST(request: Request) {
       // Also check note for import marker
       const noteImported = order.note?.includes("Correo Argentino - Envío importado");
 
-      if (alreadyImported || noteImported) {
+      if (!forceReimport && (alreadyImported || noteImported)) {
         results.push({
           orderName: order.name,
           status: "skipped",

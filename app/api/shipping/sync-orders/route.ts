@@ -26,15 +26,17 @@ export async function POST(request: Request) {
 
     console.log(`🔄 Syncing orders since ${sinceISO}...`);
 
-    // 2. Fetch recent paid orders from Shopify via GraphQL
+    // 2. Fetch recent UNFULFILLED + PAID orders from Shopify via GraphQL
+    //    "unfulfilled" = "No preparado" in Spanish UI
     const query = `{
-      orders(first: 50, query: "financial_status:paid created_at:>='${sinceISO}'", sortKey: CREATED_AT, reverse: true) {
+      orders(first: 50, query: "financial_status:paid fulfillment_status:unfulfilled created_at:>='${sinceISO}'", sortKey: CREATED_AT, reverse: true) {
         edges {
           node {
             id
             name
             email
             createdAt
+            displayFulfillmentStatus
             totalPriceSet { shopMoney { amount } }
             note
             shippingAddress {
@@ -78,6 +80,7 @@ export async function POST(request: Request) {
         name: string;
         email: string;
         createdAt: string;
+        displayFulfillmentStatus: string;
         totalPriceSet: { shopMoney: { amount: string } };
         note: string | null;
         shippingAddress: {
@@ -108,7 +111,7 @@ export async function POST(request: Request) {
     const data = await shopifyAdminFetch<{ orders: { edges: OrderEdge[] } }>(query);
     const allOrders = data.orders.edges.map((e) => e.node);
 
-    console.log(`Found ${allOrders.length} paid orders since ${sinceISO}`);
+    console.log(`Found ${allOrders.length} unfulfilled+paid orders since ${sinceISO}`);
 
     // 3. Filter to Correo Argentino orders only
     const caOrders = allOrders.filter((order) =>

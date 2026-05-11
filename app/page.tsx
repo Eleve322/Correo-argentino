@@ -145,9 +145,10 @@ export default function Dashboard() {
 
         {/* Sync Section */}
         <section style={styles.card}>
-          <h2 style={styles.cardTitle}>🔄 Sincronizar pedidos</h2>
+          <h2 style={styles.cardTitle}>📦 Sincronizar pedidos no preparados</h2>
           <p style={styles.cardDesc}>
-            Importa a MiCorreo los pedidos de hoy con Correo Argentino que no se hayan sincronizado.
+            Importa a MiCorreo los pedidos de hoy con Correo Argentino que estén en estado
+            &quot;No preparado&quot; y no se hayan sincronizado aún.
           </p>
 
           <button
@@ -164,7 +165,7 @@ export default function Dashboard() {
           {syncStatus === "done" && syncResult && !syncResult.error && (
             <div style={styles.syncResults}>
               <p style={styles.syncSummary}>
-                {syncResult.totalOrders} pedidos pagados · {syncResult.correoArgentinaOrders} con Correo Argentino
+                {syncResult.totalOrders} no preparados · {syncResult.correoArgentinaOrders} con Correo Argentino
               </p>
               {syncResult.results?.map((r, i) => (
                 <div key={i} style={styles.syncRow}>

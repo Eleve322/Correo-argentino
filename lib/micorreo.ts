@@ -652,6 +652,123 @@ export function parseShopifyAddress(
 }
 
 // ---------------------------------------------------------------------------
+// Helper: Clean postal code for MiCorreo (numbers only)
+// ---------------------------------------------------------------------------
+
+/**
+ * MiCorreo only accepts numeric postal codes (4 digits).
+ * Shopify may send CPA format: "S2000ELL" (letter + 4 digits + 3 letters)
+ * or just "2000".
+ *
+ * Examples:
+ *   "S2000ELL" → "2000"
+ *   "B1640FRE" → "1640"
+ *   "C1425" → "1425"
+ *   "1640" → "1640"
+ *   "B 1640 FRE" → "1640"
+ */
+export function cleanPostalCode(rawZip: string): string {
+  if (!rawZip) return "";
+
+  // Try to extract the 4-digit numeric part from CPA format
+  // CPA format: 1 letter + 4 digits + 3 letters (e.g. S2000ELL)
+  const cpaMatch = rawZip.match(/[A-Za-z]?\s*(\d{4})\s*[A-Za-z]*/);
+  if (cpaMatch) return cpaMatch[1]!;
+
+  // Fallback: extract all digits
+  const digits = rawZip.replace(/\D/g, "");
+  return digits;
+}
+
+// ---------------------------------------------------------------------------
+// Helper: Normalize Shopify province code → MiCorreo province code
+// ---------------------------------------------------------------------------
+
+/**
+ * Shopify sends province codes in various formats:
+ *   - Full ISO: "AR-B", "AR-C"
+ *   - Just letter: "B", "C"
+ *   - Full name: "Buenos Aires", "Ciudad Autónoma de Buenos Aires"
+ *   - Shopify internal: "Buenos Aires" (could be province OR CABA)
+ *
+ * MiCorreo expects a single letter: "B" for Pcia. de Buenos Aires,
+ * "C" for Capital Federal (CABA).
+ *
+ * IMPORTANT: Shopify uses "Buenos Aires" for the PROVINCE (not CABA).
+ * CABA is "Ciudad Autónoma de Buenos Aires" in Shopify.
+ */
+const PROVINCE_NAME_MAP: Record<string, string> = {
+  // Full names → single letter
+  "salta": "A",
+  "buenos aires": "B",
+  "provincia de buenos aires": "B",
+  "pcia de buenos aires": "B",
+  "pcia. de buenos aires": "B",
+  "gba": "B",
+  "ciudad autonoma de buenos aires": "C",
+  "ciudad autónoma de buenos aires": "C",
+  "capital federal": "C",
+  "caba": "C",
+  "san luis": "D",
+  "entre rios": "E",
+  "entre ríos": "E",
+  "la rioja": "F",
+  "santiago del estero": "G",
+  "chaco": "H",
+  "san juan": "J",
+  "catamarca": "K",
+  "la pampa": "L",
+  "mendoza": "M",
+  "misiones": "N",
+  "formosa": "P",
+  "neuquen": "Q",
+  "neuquén": "Q",
+  "rio negro": "R",
+  "río negro": "R",
+  "santa fe": "S",
+  "tucuman": "T",
+  "tucumán": "T",
+  "chubut": "U",
+  "tierra del fuego": "V",
+  "corrientes": "W",
+  "cordoba": "X",
+  "córdoba": "X",
+  "jujuy": "Y",
+  "santa cruz": "Z",
+};
+
+export function normalizeProvinceCode(shopifyProvince: string): string {
+  if (!shopifyProvince) return "";
+
+  const input = shopifyProvince.trim();
+
+  // Already a single letter? Return uppercase
+  if (/^[A-Za-z]$/.test(input)) return input.toUpperCase();
+
+  // ISO format "AR-X"? Extract the letter
+  const isoMatch = input.match(/^AR-([A-Za-z])$/i);
+  if (isoMatch) return isoMatch[1]!.toUpperCase();
+
+  // Try name lookup
+  const normalized = input.toLowerCase()
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, ""); // strip accents for matching
+  const normalizedWithAccents = input.toLowerCase();
+
+  // Try with accents first, then without
+  const code = PROVINCE_NAME_MAP[normalizedWithAccents]
+    || PROVINCE_NAME_MAP[normalized]
+    || Object.entries(PROVINCE_NAME_MAP).find(
+        ([key]) => normalized.includes(key.normalize("NFD").replace(/[\u0300-\u036f]/g, ""))
+      )?.[1];
+
+  if (code) return code;
+
+  // Last resort: if it's 2+ chars, try first char
+  console.warn(`[Province] Could not normalize "${shopifyProvince}", using first char`);
+  return input[0]?.toUpperCase() || "";
+}
+
+// ---------------------------------------------------------------------------
 // Helper: Build shipment from Shopify order data
 // ---------------------------------------------------------------------------
 
@@ -720,6 +837,17 @@ export function buildShipmentRequest(
     `[Phone] "${input.recipient.phone}" → area="${phone.areaCode}" num="${phone.subscriberNumber}"`
   );
 
+  // 5. Clean postal code and province
+  const cleanedZip = cleanPostalCode(input.recipient.zip);
+  const cleanedProvince = normalizeProvinceCode(input.recipient.provinceCode);
+
+  console.log(
+    `[PostalCode] "${input.recipient.zip}" → "${cleanedZip}"`
+  );
+  console.log(
+    `[Province] "${input.recipient.provinceCode}" → "${cleanedProvince}"`
+  );
+
   return {
     extOrderId: input.orderName.replace("#", ""),
     orderNumber: input.orderName,
@@ -749,8 +877,8 @@ export function buildShipmentRequest(
         floor: "",
         apartment: observations || (input.recipient.address2 && !observations ? input.recipient.address2 : ""),
         city: input.recipient.city,
-        provinceCode: input.recipient.provinceCode,
-        postalCode: input.recipient.zip,
+        provinceCode: cleanedProvince,
+        postalCode: cleanedZip,
       },
       weight: Math.max(1, Math.round(input.weightGrams)),
       declaredValue: Math.round(input.declaredValue * 100) / 100,

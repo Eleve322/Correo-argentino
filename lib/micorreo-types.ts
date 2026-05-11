@@ -195,6 +195,10 @@ export interface MiCorreoShipmentRequest {
     phone?: string | null;
     cellPhone?: string | null;
     email?: string | null;
+    /** "S" = drop off at branch (sucursal), "P" = pickup from address */
+    admissionType?: "S" | "P";
+    /** Branch code for drop-off (when admissionType = "S") */
+    originAgency?: string | null;
     originAddress?: {
       streetName?: string | null;
       streetNumber?: string | null;

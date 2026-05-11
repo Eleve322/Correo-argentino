@@ -728,6 +728,10 @@ export function buildShipmentRequest(
       phone: process.env.SENDER_PHONE || null,
       cellPhone: null,
       email: process.env.SENDER_EMAIL || null,
+      // "S" = drop off at branch (sucursal), NOT pickup
+      admissionType: "S",
+      // Origin branch code (e.g. Martinez) — set via SENDER_AGENCY_CODE env var
+      originAgency: process.env.SENDER_AGENCY_CODE || null,
       originAddress: {
         streetName: process.env.SENDER_STREET || null,
         streetNumber: process.env.SENDER_STREET_NUMBER || null,

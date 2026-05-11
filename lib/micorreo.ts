@@ -404,6 +404,254 @@ export async function getTracking(
 }
 
 // ---------------------------------------------------------------------------
+// Helper: Parse Argentine phone numbers
+// ---------------------------------------------------------------------------
+
+/**
+ * Known area codes by length (2, 3, and 4 digits).
+ * Buenos Aires (11) is the only 2-digit code.
+ * Major cities use 3 digits. Smaller cities use 4.
+ *
+ * Source: ENACOM / CNC area code list
+ */
+const AREA_CODES_2 = ["11"];
+const AREA_CODES_3 = [
+  "220","221","223","230","236","237","249","260","261","263","264","266",
+  "280","291","294","297","298","299","336","341","342","343","345","348",
+  "351","353","358","362","364","370","376","379","380","381","383","385",
+  "387","388",
+];
+
+/**
+ * Parse an Argentine phone number into area code and subscriber number.
+ *
+ * Input formats supported:
+ *   - "+54 261 269-7483"
+ *   - "+54 342 610-2586"
+ *   - "54 261 3897785"
+ *   - "0261-4551234"
+ *   - "261 4551234"
+ *   - "15 4551234" (local mobile without area code — returns empty areaCode)
+ *
+ * Output:
+ *   - areaCode: "261" (sin 0)
+ *   - subscriberNumber: "2697483" (sin 15)
+ *
+ * MiCorreo fields:
+ *   - "Cód. Área (sin 0)" → areaCode
+ *   - "Celular (sin 15)" → subscriberNumber
+ */
+export function parseArgentinePhone(rawPhone: string): {
+  areaCode: string;
+  subscriberNumber: string;
+  fullFormatted: string; // "area + number" for the simple phone field
+} {
+  if (!rawPhone || !rawPhone.trim()) {
+    return { areaCode: "", subscriberNumber: "", fullFormatted: "" };
+  }
+
+  // 1. Strip everything except digits
+  let digits = rawPhone.replace(/[^\d]/g, "");
+
+  // 2. Remove country code "54" from the start
+  if (digits.startsWith("54") && digits.length > 10) {
+    digits = digits.slice(2);
+  }
+
+  // 3. Remove leading "0" (trunk prefix)
+  if (digits.startsWith("0")) {
+    digits = digits.slice(1);
+  }
+
+  // 4. Remove mobile prefix "9" (used in international format +54 9 ...)
+  //    Only if we still have >10 digits
+  if (digits.startsWith("9") && digits.length > 10) {
+    digits = digits.slice(1);
+  }
+
+  // 5. Remove "15" mobile prefix if it appears after area code
+  //    "15" is always 2 digits and the subscriber part that follows is 8 digits
+  //    But we need to detect it carefully — only remove if number is too long
+
+  // 6. Try to identify area code
+  let areaCode = "";
+  let subscriberNumber = digits;
+
+  // Check 2-digit area codes first (Buenos Aires = 11)
+  for (const code of AREA_CODES_2) {
+    if (digits.startsWith(code)) {
+      areaCode = code;
+      subscriberNumber = digits.slice(code.length);
+      break;
+    }
+  }
+
+  // Then 3-digit area codes (most major cities)
+  if (!areaCode) {
+    for (const code of AREA_CODES_3) {
+      if (digits.startsWith(code)) {
+        areaCode = code;
+        subscriberNumber = digits.slice(code.length);
+        break;
+      }
+    }
+  }
+
+  // Fallback: if no known area code matched, try heuristic
+  // Argentine numbers are 10 digits total (area + subscriber)
+  if (!areaCode && digits.length >= 10) {
+    // Assume first 2-4 digits are area code based on total length
+    // Standard: 10 digits = area(2-4) + subscriber(6-8)
+    // Try 3-digit area code as default
+    areaCode = digits.slice(0, 3);
+    subscriberNumber = digits.slice(3);
+  }
+
+  // 7. Remove "15" from the start of subscriber number (mobile prefix)
+  if (subscriberNumber.startsWith("15")) {
+    subscriberNumber = subscriberNumber.slice(2);
+  }
+
+  const fullFormatted = areaCode
+    ? `${areaCode}${subscriberNumber}`
+    : subscriberNumber;
+
+  return { areaCode, subscriberNumber, fullFormatted };
+}
+
+// ---------------------------------------------------------------------------
+// Helper: Smart address parsing for Shopify → MiCorreo
+// ---------------------------------------------------------------------------
+
+/**
+ * Patterns that indicate delivery instructions (go to observations, NOT address).
+ * Case-insensitive.
+ */
+const OBSERVATION_PATTERNS = [
+  /port[oó]n\s+(negro|blanco|gris|marr[oó]n|verde|rojo|grande|chico)/i,
+  /casa\s+(de\s+)?atr[aá]s/i,
+  /timbre/i,
+  /llamar/i,
+  /golpear/i,
+  /reja\s/i,
+  /dejar\s+en/i,
+  /al\s+fondo/i,
+  /entre\s+(calle|av)/i,
+  /esquina/i,
+  /frente\s+a/i,
+];
+
+/**
+ * Patterns that are part of the address (include in streetNumber).
+ * "Lote 23", "Mza B", "Casa 5", "Parcela 10", "Nro 456", "Block A"
+ */
+const ADDRESS_PART_PATTERNS = [
+  /^(lote|lt|mza|manzana|casa|parcela|parc|nro|block|bloque|torre|cuerpo|edif|edificio|barrio|bo|bario)\s*\.?\s*\S+/i,
+];
+
+/**
+ * Smart address parser that handles messy Shopify address inputs.
+ *
+ * Cases handled:
+ *   1. "Lateral Paso 2000" → street="Lateral Paso", number="2000"
+ *   2. "Country Altos de la Ribera" (no number) → street="Country Altos de la Ribera", number="" (NO fake 0)
+ *   3. address2="Lote 23" → becomes part of the street: "Country Altos de la Ribera Lote 23"
+ *   4. address2="portón negro" → goes to observations
+ *   5. "Calle Severo Del Castillo 0" → detects fake 0, street="Calle Severo Del Castillo", number=""
+ */
+export function parseShopifyAddress(
+  address1: string,
+  address2?: string
+): {
+  streetName: string;
+  streetNumber: string;
+  observations: string;
+} {
+  const addr1 = (address1 || "").trim();
+  const addr2 = (address2 || "").trim();
+
+  // --- Process address2 first: classify as address part vs observation ---
+  let addr2AddressParts: string[] = [];
+  let addr2Observations: string[] = [];
+
+  if (addr2) {
+    // Split address2 by comma in case it has multiple parts
+    const parts = addr2.split(",").map((p) => p.trim()).filter(Boolean);
+
+    for (const part of parts) {
+      const isObservation = OBSERVATION_PATTERNS.some((p) => p.test(part));
+      const isAddressPart = ADDRESS_PART_PATTERNS.some((p) => p.test(part));
+
+      if (isObservation) {
+        addr2Observations.push(part);
+      } else if (isAddressPart) {
+        addr2AddressParts.push(part);
+      } else {
+        // If it looks like a number or location identifier, it's address
+        // If it's descriptive text, it's observation
+        if (/\d/.test(part) && part.length < 30) {
+          addr2AddressParts.push(part);
+        } else if (part.length > 40) {
+          addr2Observations.push(part);
+        } else {
+          // Short text without numbers — could be "Depto 3B" or "Barrio Norte"
+          addr2AddressParts.push(part);
+        }
+      }
+    }
+  }
+
+  // --- Parse address1: extract street name and number ---
+  // Match: "Street Name 1234" or "Street Name 1234 bis" or "Street Name 1234-A"
+  // The number must be at least 1 digit and appear at the end
+  const streetMatch = addr1.match(/^(.+?)\s+(\d+(?:\s*(?:bis|[a-z]))?(?:\s*[-\/]\s*\w+)?)$/i);
+
+  let streetName: string;
+  let streetNumber: string;
+
+  if (streetMatch) {
+    streetName = streetMatch[1]!;
+    streetNumber = streetMatch[2]!;
+
+    // IMPORTANT: Reject fake "0" as a street number
+    if (streetNumber === "0") {
+      streetName = addr1; // Keep the full text
+      streetNumber = "";
+    }
+  } else {
+    // No number found — keep the entire address1 as street name
+    streetName = addr1;
+    streetNumber = "";
+  }
+
+  // --- Append address2 parts that belong in the address ---
+  if (addr2AddressParts.length > 0) {
+    const extraAddress = addr2AddressParts.join(", ");
+
+    // If there's no street number and addr2 has a number-like part, use it as number
+    // e.g. addr1="Country Altos de la Ribera", addr2="Lote 23"
+    if (!streetNumber) {
+      // Check if the first addr2 part starts with a location identifier
+      const firstPart = addr2AddressParts[0]!;
+      const isLocId = ADDRESS_PART_PATTERNS.some((p) => p.test(firstPart));
+      if (isLocId) {
+        // Append to street name: "Country Altos de la Ribera Lote 23"
+        streetName = `${streetName} ${extraAddress}`.trim();
+      } else {
+        streetName = `${streetName} ${extraAddress}`.trim();
+      }
+    } else {
+      // We already have a street number, put addr2 parts in observations
+      addr2Observations.push(...addr2AddressParts);
+    }
+  }
+
+  const observations = addr2Observations.join(", ");
+
+  return { streetName, streetNumber, observations };
+}
+
+// ---------------------------------------------------------------------------
 // Helper: Build shipment from Shopify order data
 // ---------------------------------------------------------------------------
 
@@ -439,17 +687,38 @@ export interface ShopifyToShipmentInput {
 
 /**
  * Build a MiCorreo shipment request from Shopify order data.
+ *
+ * This function handles:
+ *   - Smart address parsing (no fake "0" numbers)
+ *   - Phone number parsing (area code + subscriber for MiCorreo)
+ *   - Delivery instruction routing (observations)
  */
 export function buildShipmentRequest(
   input: ShopifyToShipmentInput
 ): Omit<MiCorreoShipmentRequest, "customerId"> {
-  // Parse street name and number from address1
-  const addressMatch = input.recipient.address1.match(/^(.+?)\s+(\d+.*)$/);
-  const streetName = addressMatch ? addressMatch[1] : input.recipient.address1;
-  const streetNumber = addressMatch ? addressMatch[2] : "S/N";
+  // 1. Parse address intelligently
+  const { streetName, streetNumber, observations } = parseShopifyAddress(
+    input.recipient.address1,
+    input.recipient.address2
+  );
 
-  // Estimate dimensions if not provided, based on weight and item count
+  // 2. Parse phone number into area code + subscriber
+  const phone = parseArgentinePhone(input.recipient.phone || "");
+
+  // 3. Estimate dimensions if not provided
   const dims = input.dimensions ?? estimateDimensionsFromWeight(input.weightGrams, input.itemCount || 1);
+
+  // 4. Build observation text (address2 instructions + phone as backup)
+  const observationParts: string[] = [];
+  if (observations) observationParts.push(observations);
+
+  console.log(
+    `[Address] "${input.recipient.address1}" + "${input.recipient.address2 || ""}" → ` +
+    `street="${streetName}" num="${streetNumber}" obs="${observations}"`
+  );
+  console.log(
+    `[Phone] "${input.recipient.phone}" → area="${phone.areaCode}" num="${phone.subscriberNumber}"`
+  );
 
   return {
     extOrderId: input.orderName.replace("#", ""),
@@ -471,8 +740,10 @@ export function buildShipmentRequest(
     },
     recipient: {
       name: input.recipient.name,
-      phone: input.recipient.phone || "",
-      cellPhone: "",
+      // phone = "areaCode + subscriberNumber" (full number without +54 or 0 or 15)
+      phone: phone.areaCode,
+      // cellPhone = subscriber number without 15
+      cellPhone: phone.subscriberNumber,
       email: input.recipient.email || "",
     },
     shipping: {
@@ -483,7 +754,7 @@ export function buildShipmentRequest(
         streetName,
         streetNumber,
         floor: "",
-        apartment: input.recipient.address2 || "",
+        apartment: observations || (input.recipient.address2 && !observations ? input.recipient.address2 : ""),
         city: input.recipient.city,
         provinceCode: input.recipient.provinceCode,
         postalCode: input.recipient.zip,

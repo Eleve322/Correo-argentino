@@ -19,6 +19,8 @@ export async function POST(request: Request) {
     const body = await request.json().catch(() => ({}));
     const daysBack = body.daysBack || 1;
     const forceReimport = body.force === true;
+    // If specific order IDs are passed, only sync those
+    const selectedOrderIds: string[] | undefined = body.orderIds;
 
     // 1. Calculate date range
     const sinceDate = new Date();
@@ -125,10 +127,17 @@ export async function POST(request: Request) {
 
     console.log(`${caOrders.length} use Correo Argentino shipping`);
 
+    // 3b. If specific order IDs were requested, filter further
+    const ordersToSync = selectedOrderIds?.length
+      ? caOrders.filter((order) => selectedOrderIds.includes(order.id))
+      : caOrders;
+
+    console.log(`${ordersToSync.length} orders to process`);
+
     // 4. Import each one that hasn't been imported yet
     const results: SyncResult[] = [];
 
-    for (const order of caOrders) {
+    for (const order of ordersToSync) {
       // Check if already imported via metafield (skip if force=true)
       const alreadyImported = order.metafields.edges.some(
         (mf) => mf.node.namespace === "correo_argentino" && mf.node.key === "imported_at"

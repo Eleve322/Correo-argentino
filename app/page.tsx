@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 
 type ReturnResult = {
   success?: boolean;
@@ -21,6 +21,30 @@ type SyncResult = {
   details?: string;
 };
 
+type PendingOrder = {
+  id: string;
+  numericId: string;
+  name: string;
+  email: string;
+  createdAt: string;
+  totalPrice: string;
+  customerName: string;
+  city: string;
+  province: string;
+  shippingMethod: string;
+  itemCount: number;
+  synced: boolean;
+  syncedAt?: string;
+};
+
+type PendingResult = {
+  total: number;
+  synced: number;
+  notSynced: number;
+  orders: PendingOrder[];
+  error?: string;
+};
+
 export default function Dashboard() {
   const [orderInput, setOrderInput] = useState("");
   const [returnStatus, setReturnStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
@@ -29,14 +53,60 @@ export default function Dashboard() {
   const [syncStatus, setSyncStatus] = useState<"idle" | "loading" | "done">("idle");
   const [syncResult, setSyncResult] = useState<SyncResult | null>(null);
 
+  // Pending orders
+  const [pendingOrders, setPendingOrders] = useState<PendingOrder[]>([]);
+  const [pendingLoading, setPendingLoading] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+
   // Extract numeric order ID from various formats
   function parseOrderId(input: string): string {
     const cleaned = input.trim().replace("#", "");
-    // If it's just a number, return as-is
     if (/^\d+$/.test(cleaned)) return cleaned;
-    // If it's a Shopify GID
     if (cleaned.startsWith("gid://")) return cleaned;
     return cleaned;
+  }
+
+  // Fetch pending orders
+  const loadPendingOrders = useCallback(async () => {
+    setPendingLoading(true);
+    try {
+      const res = await fetch("/api/shipping/pending-orders?daysBack=7");
+      const data: PendingResult = await res.json();
+      if (data.orders) {
+        setPendingOrders(data.orders);
+        // Auto-select unsynced orders
+        const unsyncedIds = new Set(
+          data.orders.filter((o) => !o.synced).map((o) => o.id)
+        );
+        setSelectedIds(unsyncedIds);
+      }
+    } catch {
+      // silently fail
+    } finally {
+      setPendingLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadPendingOrders();
+  }, [loadPendingOrders]);
+
+  function toggleOrder(id: string) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function toggleAll() {
+    const unsynced = pendingOrders.filter((o) => !o.synced);
+    if (selectedIds.size === unsynced.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(unsynced.map((o) => o.id)));
+    }
   }
 
   async function handleReturn() {
@@ -59,7 +129,33 @@ export default function Dashboard() {
     }
   }
 
-  async function handleSync(force = false) {
+  async function handleSyncSelected() {
+    if (selectedIds.size === 0) return;
+    setSyncStatus("loading");
+    setSyncResult(null);
+
+    try {
+      const res = await fetch("/api/shipping/sync-orders", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          daysBack: 7,
+          force: true,
+          orderIds: Array.from(selectedIds),
+        }),
+      });
+      const data = await res.json();
+      setSyncResult(data);
+      setSyncStatus("done");
+      // Refresh the list
+      await loadPendingOrders();
+    } catch {
+      setSyncResult({ error: "Error de conexión" });
+      setSyncStatus("done");
+    }
+  }
+
+  async function handleSyncAll(force = false) {
     setSyncStatus("loading");
     setSyncResult(null);
 
@@ -72,10 +168,32 @@ export default function Dashboard() {
       const data = await res.json();
       setSyncResult(data);
       setSyncStatus("done");
+      await loadPendingOrders();
     } catch {
       setSyncResult({ error: "Error de conexión" });
       setSyncStatus("done");
     }
+  }
+
+  const unsyncedOrders = pendingOrders.filter((o) => !o.synced);
+  const syncedOrders = pendingOrders.filter((o) => o.synced);
+
+  function formatDate(iso: string) {
+    const d = new Date(iso);
+    return d.toLocaleDateString("es-AR", {
+      day: "2-digit",
+      month: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  }
+
+  function formatPrice(amount: string) {
+    return new Intl.NumberFormat("es-AR", {
+      style: "currency",
+      currency: "ARS",
+      maximumFractionDigits: 0,
+    }).format(parseFloat(amount));
   }
 
   return (
@@ -89,6 +207,166 @@ export default function Dashboard() {
             <p style={styles.subtitle}>Panel de gestión de envíos — Indy</p>
           </div>
         </header>
+
+        {/* Pending Orders Section */}
+        <section style={styles.card}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
+            <h2 style={styles.cardTitle}>📋 Órdenes no preparadas</h2>
+            <button
+              onClick={loadPendingOrders}
+              disabled={pendingLoading}
+              style={{
+                ...styles.btnSmall,
+                marginTop: 0,
+                opacity: pendingLoading ? 0.6 : 1,
+              }}
+            >
+              {pendingLoading ? "Cargando..." : "🔄 Actualizar"}
+            </button>
+          </div>
+
+          {pendingLoading && pendingOrders.length === 0 && (
+            <p style={{ color: "#888", fontSize: "13px" }}>Cargando órdenes...</p>
+          )}
+
+          {/* Stats */}
+          {pendingOrders.length > 0 && (
+            <div style={styles.statsRow}>
+              <span style={styles.statBadge}>
+                {pendingOrders.length} total
+              </span>
+              <span style={{ ...styles.statBadge, backgroundColor: "#1a2e1a", color: "#8fd19e" }}>
+                {syncedOrders.length} sincronizadas
+              </span>
+              <span style={{ ...styles.statBadge, backgroundColor: "#2e2a1a", color: "#ffd700" }}>
+                {unsyncedOrders.length} sin sincronizar
+              </span>
+            </div>
+          )}
+
+          {/* Unsynced Orders List */}
+          {unsyncedOrders.length > 0 && (
+            <>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", margin: "16px 0 8px" }}>
+                <label style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer", fontSize: "13px", color: "#aaa" }}>
+                  <input
+                    type="checkbox"
+                    checked={selectedIds.size === unsyncedOrders.length}
+                    onChange={toggleAll}
+                    style={styles.checkbox}
+                  />
+                  Seleccionar todas ({unsyncedOrders.length})
+                </label>
+                <button
+                  onClick={handleSyncSelected}
+                  disabled={syncStatus === "loading" || selectedIds.size === 0}
+                  style={{
+                    ...styles.btnPrimary,
+                    opacity: syncStatus === "loading" || selectedIds.size === 0 ? 0.5 : 1,
+                    fontSize: "13px",
+                    padding: "8px 16px",
+                  }}
+                >
+                  {syncStatus === "loading"
+                    ? "Sincronizando..."
+                    : `Sincronizar ${selectedIds.size} seleccionada${selectedIds.size !== 1 ? "s" : ""}`}
+                </button>
+              </div>
+
+              <div style={styles.orderList}>
+                {unsyncedOrders.map((order) => (
+                  <label
+                    key={order.id}
+                    style={{
+                      ...styles.orderRow,
+                      backgroundColor: selectedIds.has(order.id) ? "#1a2a1a" : "#111",
+                      borderColor: selectedIds.has(order.id) ? "#3a5a2a" : "#2a2a2a",
+                    }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.has(order.id)}
+                      onChange={() => toggleOrder(order.id)}
+                      style={styles.checkbox}
+                    />
+                    <div style={styles.orderInfo}>
+                      <div style={styles.orderHeader}>
+                        <span style={styles.orderName}>{order.name}</span>
+                        <span style={styles.orderPrice}>{formatPrice(order.totalPrice)}</span>
+                      </div>
+                      <div style={styles.orderMeta}>
+                        <span>{order.customerName}</span>
+                        <span>•</span>
+                        <span>{order.city}{order.province ? `, ${order.province}` : ""}</span>
+                        <span>•</span>
+                        <span>{order.itemCount} art.</span>
+                        <span>•</span>
+                        <span>{formatDate(order.createdAt)}</span>
+                      </div>
+                      <div style={styles.orderShipping}>{order.shippingMethod}</div>
+                    </div>
+                  </label>
+                ))}
+              </div>
+            </>
+          )}
+
+          {/* Synced Orders (collapsed) */}
+          {syncedOrders.length > 0 && (
+            <details style={{ marginTop: "16px" }}>
+              <summary style={{ cursor: "pointer", fontSize: "13px", color: "#6a9", padding: "8px 0" }}>
+                ✅ {syncedOrders.length} ya sincronizada{syncedOrders.length !== 1 ? "s" : ""}
+              </summary>
+              <div style={styles.orderList}>
+                {syncedOrders.map((order) => (
+                  <div key={order.id} style={{ ...styles.orderRow, opacity: 0.6 }}>
+                    <div style={{ width: "18px", textAlign: "center", fontSize: "12px" }}>✅</div>
+                    <div style={styles.orderInfo}>
+                      <div style={styles.orderHeader}>
+                        <span style={styles.orderName}>{order.name}</span>
+                        <span style={styles.orderPrice}>{formatPrice(order.totalPrice)}</span>
+                      </div>
+                      <div style={styles.orderMeta}>
+                        <span>{order.customerName}</span>
+                        <span>•</span>
+                        <span>{order.city}</span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </details>
+          )}
+
+          {pendingOrders.length === 0 && !pendingLoading && (
+            <p style={{ color: "#888", fontSize: "13px" }}>No hay órdenes no preparadas con Correo Argentino</p>
+          )}
+
+          {/* Sync Results */}
+          {syncStatus === "done" && syncResult && !syncResult.error && (
+            <div style={styles.syncResults}>
+              {syncResult.results?.map((r, i) => (
+                <div key={i} style={styles.syncRow}>
+                  <span style={{
+                    ...styles.syncBadge,
+                    backgroundColor: r.status === "imported" ? "#d4edda" : r.status === "skipped" ? "#e2e3e5" : "#f8d7da",
+                    color: r.status === "imported" ? "#155724" : r.status === "skipped" ? "#383d41" : "#721c24",
+                  }}>
+                    {r.status === "imported" ? "✅" : r.status === "skipped" ? "⏭️" : "❌"} {r.orderName}
+                  </span>
+                  <span style={styles.syncReason}>{r.reason}</span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {syncStatus === "done" && syncResult?.error && (
+            <div style={styles.errorBox}>
+              <strong>❌ Error</strong>
+              <p>{syncResult.details || syncResult.error}</p>
+            </div>
+          )}
+        </section>
 
         {/* Return Label Section */}
         <section style={styles.card}>
@@ -143,71 +421,6 @@ export default function Dashboard() {
           )}
         </section>
 
-        {/* Sync Section */}
-        <section style={styles.card}>
-          <h2 style={styles.cardTitle}>📦 Sincronizar pedidos no preparados</h2>
-          <p style={styles.cardDesc}>
-            Importa a MiCorreo los pedidos de hoy con Correo Argentino que estén en estado
-            &quot;No preparado&quot; y no se hayan sincronizado aún.
-          </p>
-
-          <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
-            <button
-              onClick={() => handleSync(false)}
-              disabled={syncStatus === "loading"}
-              style={{
-                ...styles.btnSecondary,
-                opacity: syncStatus === "loading" ? 0.6 : 1,
-              }}
-            >
-              {syncStatus === "loading" ? "Sincronizando..." : "Sincronizar no preparados"}
-            </button>
-            <button
-              onClick={() => handleSync(true)}
-              disabled={syncStatus === "loading"}
-              style={{
-                ...styles.btnSmall,
-                opacity: syncStatus === "loading" ? 0.6 : 1,
-                marginTop: 0,
-                padding: "10px 16px",
-                fontSize: "13px",
-                backgroundColor: "#3a2a00",
-                color: "#ffd700",
-                border: "1px solid #5a4a10",
-              }}
-            >
-              🔁 Forzar re-sync
-            </button>
-          </div>
-
-          {syncStatus === "done" && syncResult && !syncResult.error && (
-            <div style={styles.syncResults}>
-              <p style={styles.syncSummary}>
-                {syncResult.totalOrders} no preparados · {syncResult.correoArgentinaOrders} con Correo Argentino
-              </p>
-              {syncResult.results?.map((r, i) => (
-                <div key={i} style={styles.syncRow}>
-                  <span style={{
-                    ...styles.syncBadge,
-                    backgroundColor: r.status === "imported" ? "#d4edda" : r.status === "skipped" ? "#e2e3e5" : "#f8d7da",
-                    color: r.status === "imported" ? "#155724" : r.status === "skipped" ? "#383d41" : "#721c24",
-                  }}>
-                    {r.status === "imported" ? "✅" : r.status === "skipped" ? "⏭️" : "❌"} {r.orderName}
-                  </span>
-                  <span style={styles.syncReason}>{r.reason}</span>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {syncStatus === "done" && syncResult?.error && (
-            <div style={styles.errorBox}>
-              <strong>❌ Error</strong>
-              <p>{syncResult.details || syncResult.error}</p>
-            </div>
-          )}
-        </section>
-
         {/* Quick Links */}
         <section style={styles.card}>
           <h2 style={styles.cardTitle}>🔗 Links rápidos</h2>
@@ -225,7 +438,7 @@ export default function Dashboard() {
         </section>
 
         <footer style={styles.footer}>
-          Correo Argentino Integration v1.0 — Indy
+          Correo Argentino Integration v1.1 — Indy
         </footer>
       </div>
     </div>
@@ -241,7 +454,7 @@ const styles: Record<string, React.CSSProperties> = {
     padding: "20px",
   },
   container: {
-    maxWidth: "720px",
+    maxWidth: "780px",
     margin: "0 auto",
   },
   header: {
@@ -284,7 +497,7 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: "16px",
     fontWeight: 600,
     color: "#fff",
-    margin: "0 0 8px",
+    margin: 0,
   },
   cardDesc: {
     fontSize: "13px",
@@ -315,17 +528,7 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: "14px",
     fontWeight: 600,
     cursor: "pointer",
-    whiteSpace: "nowrap",
-  },
-  btnSecondary: {
-    backgroundColor: "#2a2a2a",
-    color: "#e0e0e0",
-    border: "1px solid #444",
-    borderRadius: "8px",
-    padding: "10px 20px",
-    fontSize: "14px",
-    fontWeight: 500,
-    cursor: "pointer",
+    whiteSpace: "nowrap" as const,
   },
   btnSmall: {
     backgroundColor: "#333",
@@ -368,13 +571,80 @@ const styles: Record<string, React.CSSProperties> = {
     color: "#6a9",
     fontStyle: "italic",
   },
+  statsRow: {
+    display: "flex",
+    gap: "8px",
+    flexWrap: "wrap" as const,
+    marginTop: "8px",
+  },
+  statBadge: {
+    padding: "4px 10px",
+    borderRadius: "6px",
+    fontSize: "12px",
+    fontWeight: 500,
+    backgroundColor: "#222",
+    color: "#aaa",
+  },
+  orderList: {
+    display: "flex",
+    flexDirection: "column" as const,
+    gap: "4px",
+  },
+  orderRow: {
+    display: "flex",
+    alignItems: "flex-start",
+    gap: "12px",
+    padding: "10px 12px",
+    borderRadius: "8px",
+    border: "1px solid #2a2a2a",
+    backgroundColor: "#111",
+    cursor: "pointer",
+    transition: "background-color 0.15s",
+  },
+  orderInfo: {
+    flex: 1,
+    minWidth: 0,
+  },
+  orderHeader: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: "8px",
+  },
+  orderName: {
+    fontWeight: 600,
+    fontSize: "14px",
+    color: "#fff",
+  },
+  orderPrice: {
+    fontSize: "13px",
+    color: "#ffd700",
+    fontWeight: 500,
+    whiteSpace: "nowrap" as const,
+  },
+  orderMeta: {
+    display: "flex",
+    gap: "6px",
+    fontSize: "12px",
+    color: "#888",
+    marginTop: "2px",
+    flexWrap: "wrap" as const,
+  },
+  orderShipping: {
+    fontSize: "11px",
+    color: "#6a9",
+    marginTop: "4px",
+  },
+  checkbox: {
+    width: "16px",
+    height: "16px",
+    marginTop: "2px",
+    accentColor: "#ffd700",
+    cursor: "pointer",
+    flexShrink: 0,
+  },
   syncResults: {
     marginTop: "16px",
-  },
-  syncSummary: {
-    fontSize: "13px",
-    color: "#aaa",
-    margin: "0 0 10px",
   },
   syncRow: {
     display: "flex",
@@ -389,7 +659,7 @@ const styles: Record<string, React.CSSProperties> = {
     borderRadius: "4px",
     fontSize: "12px",
     fontWeight: 500,
-    whiteSpace: "nowrap",
+    whiteSpace: "nowrap" as const,
   },
   syncReason: {
     fontSize: "12px",
@@ -397,8 +667,9 @@ const styles: Record<string, React.CSSProperties> = {
   },
   linkGrid: {
     display: "flex",
-    flexDirection: "column",
+    flexDirection: "column" as const,
     gap: "8px",
+    marginTop: "12px",
   },
   link: {
     color: "#ffd700",
@@ -408,7 +679,7 @@ const styles: Record<string, React.CSSProperties> = {
     borderBottom: "1px solid #222",
   },
   footer: {
-    textAlign: "center",
+    textAlign: "center" as const,
     fontSize: "11px",
     color: "#555",
     padding: "24px 0",

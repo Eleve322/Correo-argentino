@@ -769,6 +769,49 @@ export function normalizeProvinceCode(shopifyProvince: string): string {
 }
 
 // ---------------------------------------------------------------------------
+// Helper: Build observations text for MiCorreo
+// ---------------------------------------------------------------------------
+
+/**
+ * Combines the raw address2 from Shopify with any parsed observations.
+ * The goal is to NEVER lose information the customer wrote.
+ *
+ * Flow:
+ *   1. parseShopifyAddress classifies address2 parts into:
+ *      - address parts (go into streetName)
+ *      - observation parts (delivery instructions)
+ *   2. This function takes the FULL raw address2 and the parsed observations
+ *   3. If parseShopifyAddress already put some address2 parts into the street,
+ *      we still include the full address2 in observations as a safety net
+ *
+ * Example:
+ *   address2 = "M 9 C 3 Barrio Ujemvi"
+ *   → observations in MiCorreo = "M 9 C 3 Barrio Ujemvi"
+ *
+ *   address2 = "Lote 23, portón negro"
+ *   → "Lote 23" went to streetName, "portón negro" is in parsedObs
+ *   → observations = "portón negro" (Lote 23 already in street)
+ */
+function buildObservations(rawAddress2?: string, parsedObservations?: string): string {
+  const parts: string[] = [];
+
+  // Always include the full address2 if it exists — safety net
+  const addr2 = (rawAddress2 || "").trim();
+  if (addr2) {
+    parts.push(addr2);
+  }
+
+  // If parseShopifyAddress extracted specific observation text that's
+  // different from address2, include it too (avoid duplicates)
+  const obs = (parsedObservations || "").trim();
+  if (obs && obs !== addr2 && !addr2.includes(obs)) {
+    parts.push(obs);
+  }
+
+  return parts.join(" | ");
+}
+
+// ---------------------------------------------------------------------------
 // Helper: Build shipment from Shopify order data
 // ---------------------------------------------------------------------------
 
@@ -875,11 +918,14 @@ export function buildShipmentRequest(
         streetName,
         streetNumber,
         floor: "",
-        apartment: observations || (input.recipient.address2 && !observations ? input.recipient.address2 : ""),
+        apartment: "",
         city: input.recipient.city,
         provinceCode: cleanedProvince,
         postalCode: cleanedZip,
       },
+      // Observaciones: everything from address2 that isn't part of the street
+      // e.g. "M 9 C 3 Barrio Ujemvi", "portón negro, casa atrás", "Lote 23" (if already in street)
+      observations: buildObservations(input.recipient.address2, observations),
       weight: Math.max(1, Math.round(input.weightGrams)),
       declaredValue: Math.round(input.declaredValue * 100) / 100,
       height: dims.height,

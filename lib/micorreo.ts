@@ -351,11 +351,11 @@ export async function importShipment(
       height: Math.min(255, Math.round(data.shipping.height)),
       length: Math.min(255, Math.round(data.shipping.length)),
       width: Math.min(255, Math.round(data.shipping.width)),
-      // Truncate floor/apartment to 3 chars as per API docs
+      // Truncate floor to 3 chars as per API docs; keep apartment full for observations
       address: {
         ...data.shipping.address,
         floor: data.shipping.address.floor?.slice(0, 3),
-        apartment: data.shipping.address.apartment?.slice(0, 3),
+        // apartment = "Observaciones" in MiCorreo — keep full text
       },
     },
   };
@@ -918,14 +918,13 @@ export function buildShipmentRequest(
         streetName,
         streetNumber,
         floor: "",
-        apartment: "",
+        // apartment maps to "Observaciones" in MiCorreo form
+        // Put all address2/observation info here
+        apartment: buildObservations(input.recipient.address2, observations),
         city: input.recipient.city,
         provinceCode: cleanedProvince,
         postalCode: cleanedZip,
       },
-      // Observaciones: everything from address2 that isn't part of the street
-      // e.g. "M 9 C 3 Barrio Ujemvi", "portón negro, casa atrás", "Lote 23" (if already in street)
-      observations: buildObservations(input.recipient.address2, observations),
       weight: Math.max(1, Math.round(input.weightGrams)),
       declaredValue: Math.round(input.declaredValue * 100) / 100,
       height: dims.height,

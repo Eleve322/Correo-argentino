@@ -223,8 +223,6 @@ export interface MiCorreoShipmentRequest {
     /** Branch code — required when deliveryType = "S" */
     agency?: string | null;
     address: MiCorreoShipmentAddress;
-    /** Observations — maps to "Observaciones (opcional)" in MiCorreo form */
-    observations?: string;
     /** Weight in grams (integer) */
     weight: number;
     /** Declared value in ARS */

@@ -74,11 +74,8 @@ export default function Dashboard() {
       const data: PendingResult = await res.json();
       if (data.orders) {
         setPendingOrders(data.orders);
-        // Auto-select unsynced orders
-        const unsyncedIds = new Set(
-          data.orders.filter((o) => !o.synced).map((o) => o.id)
-        );
-        setSelectedIds(unsyncedIds);
+        // Do not auto-select orders anymore, start with empty selection
+        setSelectedIds(new Set());
       }
     } catch {
       // silently fail
@@ -175,8 +172,7 @@ export default function Dashboard() {
     }
   }
 
-  const unsyncedOrders = pendingOrders.filter((o) => !o.synced);
-  const syncedOrders = pendingOrders.filter((o) => o.synced);
+  const unsyncedOrders = pendingOrders;
 
   function formatDate(iso: string) {
     const d = new Date(iso);
@@ -233,13 +229,7 @@ export default function Dashboard() {
           {pendingOrders.length > 0 && (
             <div style={styles.statsRow}>
               <span style={styles.statBadge}>
-                {pendingOrders.length} total
-              </span>
-              <span style={{ ...styles.statBadge, backgroundColor: "#1a2e1a", color: "#8fd19e" }}>
-                {syncedOrders.length} sincronizadas
-              </span>
-              <span style={{ ...styles.statBadge, backgroundColor: "#2e2a1a", color: "#ffd700" }}>
-                {unsyncedOrders.length} sin sincronizar
+                {pendingOrders.length} órdenes pendientes de sincronización
               </span>
             </div>
           )}
@@ -311,32 +301,7 @@ export default function Dashboard() {
             </>
           )}
 
-          {/* Synced Orders (collapsed) */}
-          {syncedOrders.length > 0 && (
-            <details style={{ marginTop: "16px" }}>
-              <summary style={{ cursor: "pointer", fontSize: "13px", color: "#6a9", padding: "8px 0" }}>
-                ✅ {syncedOrders.length} ya sincronizada{syncedOrders.length !== 1 ? "s" : ""}
-              </summary>
-              <div style={styles.orderList}>
-                {syncedOrders.map((order) => (
-                  <div key={order.id} style={{ ...styles.orderRow, opacity: 0.6 }}>
-                    <div style={{ width: "18px", textAlign: "center", fontSize: "12px" }}>✅</div>
-                    <div style={styles.orderInfo}>
-                      <div style={styles.orderHeader}>
-                        <span style={styles.orderName}>{order.name}</span>
-                        <span style={styles.orderPrice}>{formatPrice(order.totalPrice)}</span>
-                      </div>
-                      <div style={styles.orderMeta}>
-                        <span>{order.customerName}</span>
-                        <span>•</span>
-                        <span>{order.city}</span>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </details>
-          )}
+
 
           {pendingOrders.length === 0 && !pendingLoading && (
             <p style={{ color: "#888", fontSize: "13px" }}>No hay órdenes no preparadas con Correo Argentino</p>

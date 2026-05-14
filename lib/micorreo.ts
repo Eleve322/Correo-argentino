@@ -602,26 +602,40 @@ export function parseShopifyAddress(
   }
 
   // --- Parse address1: extract street name and number ---
-  // Match: "Street Name 1234" or "Street Name 1234 bis" or "Street Name 1234-A"
-  // The number must be at least 1 digit and appear at the end
-  const streetMatch = addr1.match(/^(.+?)\s+(\d+(?:\s*(?:bis|[a-z]))?(?:\s*[-\/]\s*\w+)?)$/i);
+  let streetName = addr1;
+  let streetNumber = "";
+  let extraObs = "";
 
-  let streetName: string;
-  let streetNumber: string;
+  // Match: "Street Name 1234" and possibly some trailing text like ", Barrio Norte"
+  const streetMatch = addr1.match(/^(.+?)\s+(?:Nro\s*|N°\s*|#\s*)?(\d+(?:\s*(?:bis|[a-z]))?(?:\s*[-\/]\s*\w+)?)(?:[\s,]+(.*))?$/i);
 
   if (streetMatch) {
-    streetName = streetMatch[1]!;
-    streetNumber = streetMatch[2]!;
+    streetName = streetMatch[1]!.trim();
+    streetNumber = streetMatch[2]!.trim();
+    if (streetMatch[3]) {
+      extraObs = streetMatch[3]!.trim();
+    }
 
     // IMPORTANT: Reject fake "0" as a street number
     if (streetNumber === "0") {
       streetName = addr1; // Keep the full text
       streetNumber = "";
+      extraObs = "";
     }
-  } else {
-    // No number found — keep the entire address1 as street name
-    streetName = addr1;
-    streetNumber = "";
+  }
+
+  // Fallback for explicitly written "S/N"
+  if (!streetNumber) {
+    const snMatch = addr1.match(/^(.+?)\s+(s\/n|sn|sin numero|sin número)(?:[\s,]+(.*))?$/i);
+    if (snMatch) {
+      streetName = snMatch[1]!.trim();
+      streetNumber = "S/N";
+      if (snMatch[3]) extraObs = snMatch[3]!.trim();
+    }
+  }
+
+  if (extraObs) {
+    addr2Observations.push(extraObs);
   }
 
   // --- Append address2 parts that belong in the address ---
@@ -629,13 +643,10 @@ export function parseShopifyAddress(
     const extraAddress = addr2AddressParts.join(", ");
 
     // If there's no street number and addr2 has a number-like part, use it as number
-    // e.g. addr1="Country Altos de la Ribera", addr2="Lote 23"
     if (!streetNumber) {
-      // Check if the first addr2 part starts with a location identifier
       const firstPart = addr2AddressParts[0]!;
       const isLocId = ADDRESS_PART_PATTERNS.some((p) => p.test(firstPart));
       if (isLocId) {
-        // Append to street name: "Country Altos de la Ribera Lote 23"
         streetName = `${streetName} ${extraAddress}`.trim();
       } else {
         streetName = `${streetName} ${extraAddress}`.trim();
@@ -644,6 +655,11 @@ export function parseShopifyAddress(
       // We already have a street number, put addr2 parts in observations
       addr2Observations.push(...addr2AddressParts);
     }
+  }
+
+  // Default streetNumber to "S/N" so Correo Argentino doesn't reject the order
+  if (!streetNumber) {
+    streetNumber = "S/N";
   }
 
   const observations = addr2Observations.join(", ");
@@ -880,9 +896,9 @@ export function buildShipmentRequest(
     `[Phone] "${input.recipient.phone}" → area="${phone.areaCode}" num="${phone.subscriberNumber}"`
   );
 
-  // 5. Clean postal code and province
   const cleanedZip = cleanPostalCode(input.recipient.zip);
   const cleanedProvince = normalizeProvinceCode(input.recipient.provinceCode);
+  const finalObservations = buildObservations(input.recipient.address2, observations);
 
   console.log(
     `[PostalCode] "${input.recipient.zip}" → "${cleanedZip}"`
@@ -915,12 +931,10 @@ export function buildShipmentRequest(
       productType: "CP",
       agency: input.deliveryType === "S" ? (input.agencyCode || null) : null,
       address: {
-        streetName,
+        streetName: finalObservations ? `${streetName} (Obs: ${finalObservations})` : streetName,
         streetNumber,
         floor: "",
-        // apartment maps to "Observaciones" in MiCorreo form
-        // Put all address2/observation info here
-        apartment: buildObservations(input.recipient.address2, observations),
+        apartment: finalObservations,
         city: input.recipient.city,
         provinceCode: cleanedProvince,
         postalCode: cleanedZip,

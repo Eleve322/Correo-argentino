@@ -131,11 +131,13 @@ export async function GET(request: Request) {
       };
     });
 
+    const unsyncedOnly = pendingOrders.filter(o => !o.synced);
+
     return NextResponse.json({
-      total: pendingOrders.length,
-      synced: pendingOrders.filter((o) => o.synced).length,
-      notSynced: pendingOrders.filter((o) => !o.synced).length,
-      orders: pendingOrders,
+      total: unsyncedOnly.length,
+      synced: 0,
+      notSynced: unsyncedOnly.length,
+      orders: unsyncedOnly,
     });
   } catch (error) {
     console.error("Pending orders error:", error);

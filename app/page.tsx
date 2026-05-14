@@ -237,7 +237,20 @@ export default function Dashboard() {
           {/* Unsynced Orders List */}
           {unsyncedOrders.length > 0 && (
             <>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", margin: "16px 0 8px" }}>
+              <div style={{ 
+                display: "flex", 
+                justifyContent: "space-between", 
+                alignItems: "center", 
+                margin: "16px 0 8px",
+                position: "sticky",
+                top: "16px",
+                backgroundColor: "#1a1a1a",
+                padding: "12px 16px",
+                zIndex: 10,
+                borderRadius: "8px",
+                border: "1px solid #333",
+                boxShadow: "0 8px 16px rgba(0,0,0,0.5)"
+              }}>
                 <label style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer", fontSize: "13px", color: "#aaa" }}>
                   <input
                     type="checkbox"

@@ -931,8 +931,8 @@ export function buildShipmentRequest(
       productType: "CP",
       agency: input.deliveryType === "S" ? (input.agencyCode || null) : null,
       address: {
-        streetName: finalObservations ? `${streetName} (Obs: ${finalObservations})` : streetName,
-        streetNumber,
+        streetName: streetName,
+        streetNumber: finalObservations ? `${streetNumber} (Obs: ${finalObservations})` : streetNumber,
         floor: "",
         apartment: finalObservations,
         city: input.recipient.city,

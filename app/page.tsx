@@ -53,6 +53,10 @@ export default function Dashboard() {
   const [syncStatus, setSyncStatus] = useState<"idle" | "loading" | "done">("idle");
   const [syncResult, setSyncResult] = useState<SyncResult | null>(null);
 
+  const [forceSyncInput, setForceSyncInput] = useState("");
+  const [forceSyncStatus, setForceSyncStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
+  const [forceSyncResult, setForceSyncResult] = useState<SyncResult | null>(null);
+
   // Pending orders
   const [pendingOrders, setPendingOrders] = useState<PendingOrder[]>([]);
   const [pendingLoading, setPendingLoading] = useState(false);
@@ -123,6 +127,29 @@ export default function Dashboard() {
     } catch {
       setReturnResult({ error: "Error de conexión" });
       setReturnStatus("error");
+    }
+  }
+
+  async function handleForceSync() {
+    if (!forceSyncInput.trim()) return;
+    setForceSyncStatus("loading");
+    setForceSyncResult(null);
+
+    const cleaned = forceSyncInput.trim().replace("#", "");
+    
+    try {
+      const res = await fetch("/api/shipping/sync-orders", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ exactOrderName: cleaned, force: true }),
+      });
+      const data = await res.json();
+      setForceSyncResult(data);
+      setForceSyncStatus(data.error ? "error" : "success");
+      await loadPendingOrders();
+    } catch {
+      setForceSyncResult({ error: "Error de conexión" });
+      setForceSyncStatus("error");
     }
   }
 
@@ -395,6 +422,61 @@ export default function Dashboard() {
               <button onClick={() => setReturnStatus("idle")} style={styles.btnSmall}>
                 Reintentar
               </button>
+            </div>
+          )}
+        </section>
+
+        {/* Force Sync Section */}
+        <section style={styles.card}>
+          <h2 style={styles.cardTitle}>🚀 Forzar sincronización de orden</h2>
+          <p style={styles.cardDesc}>
+            Ingresá el número de la orden de Shopify (ej: 202114) para forzar su importación manualmente (útil para órdenes viejas o con errores).
+          </p>
+
+          <div style={styles.inputRow}>
+            <input
+              type="text"
+              placeholder="Número de orden (ej: 202114)"
+              value={forceSyncInput}
+              onChange={(e) => setForceSyncInput(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && handleForceSync()}
+              style={styles.input}
+            />
+            <button
+              onClick={handleForceSync}
+              disabled={forceSyncStatus === "loading" || !forceSyncInput.trim()}
+              style={{
+                ...styles.btnPrimary,
+                backgroundColor: "#2e2e2e",
+                color: "#e0e0e0",
+                opacity: forceSyncStatus === "loading" || !forceSyncInput.trim() ? 0.6 : 1,
+              }}
+            >
+              {forceSyncStatus === "loading" ? "Procesando..." : "Forzar importación"}
+            </button>
+          </div>
+
+          {forceSyncStatus === "success" && forceSyncResult && !forceSyncResult.error && (
+            <div style={styles.syncResults}>
+              {forceSyncResult.results?.map((r, i) => (
+                <div key={i} style={styles.syncRow}>
+                  <span style={{
+                    ...styles.syncBadge,
+                    backgroundColor: r.status === "imported" ? "#d4edda" : r.status === "skipped" ? "#e2e3e5" : "#f8d7da",
+                    color: r.status === "imported" ? "#155724" : r.status === "skipped" ? "#383d41" : "#721c24",
+                  }}>
+                    {r.status === "imported" ? "✅" : r.status === "skipped" ? "⏭️" : "❌"} {r.orderName}
+                  </span>
+                  <span style={styles.syncReason}>{r.reason}</span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {forceSyncStatus === "error" && (
+            <div style={styles.errorBox}>
+              <strong>❌ Error</strong>
+              <p>{forceSyncResult?.details || forceSyncResult?.error}</p>
             </div>
           )}
         </section>

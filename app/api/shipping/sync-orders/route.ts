@@ -19,8 +19,8 @@ export async function POST(request: Request) {
     const body = await request.json().catch(() => ({}));
     const daysBack = body.daysBack || 1;
     const forceReimport = body.force === true;
-    // If specific order IDs are passed, only sync those
     const selectedOrderIds: string[] | undefined = body.orderIds;
+    const exactOrderName: string | undefined = body.exactOrderName;
 
     // 1. Calculate date range
     const sinceDate = new Date();
@@ -30,9 +30,13 @@ export async function POST(request: Request) {
     console.log(`🔄 Syncing orders since ${sinceISO}...`);
 
     // 2. Fetch recent UNFULFILLED + PAID orders from Shopify via GraphQL
-    //    "unfulfilled" = "No preparado" in Spanish UI
+    // If exactOrderName is provided, query specifically for that order bypassing dates
+    const shopifyQuery = exactOrderName 
+      ? `name:${exactOrderName}`
+      : `financial_status:paid fulfillment_status:unfulfilled created_at:>='${sinceISO}'`;
+
     const query = `{
-      orders(first: 50, query: "financial_status:paid fulfillment_status:unfulfilled created_at:>='${sinceISO}'", sortKey: CREATED_AT, reverse: true) {
+      orders(first: 50, query: "${shopifyQuery}", sortKey: CREATED_AT, reverse: true) {
         edges {
           node {
             id

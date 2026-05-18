@@ -939,10 +939,12 @@ export function buildShipmentRequest(
       productType: "CP",
       agency: input.deliveryType === "S" ? (input.agencyCode || null) : null,
       address: {
-        streetName: streetName,
+        streetName: finalObservations
+          ? `${streetName} ${streetNumber} (${finalObservations})`
+          : `${streetName} ${streetNumber}`,
         streetNumber: streetNumber,
         floor: "",
-        apartment: finalObservations,
+        apartment: finalObservations.substring(0, 3),
         city: input.recipient.city,
         provinceCode: cleanedProvince,
         postalCode: cleanedZip,

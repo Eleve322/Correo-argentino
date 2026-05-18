@@ -646,7 +646,15 @@ export function parseShopifyAddress(
     if (!streetNumber) {
       const firstPart = addr2AddressParts[0]!;
       const isLocId = ADDRESS_PART_PATTERNS.some((p) => p.test(firstPart));
-      if (isLocId) {
+      
+      if (!isLocId && /^\d+(?:\s*(?:bis|[a-z]))?$/i.test(firstPart)) {
+        // It's a pure number like "1507" or "1507 bis", pull it in as streetNumber!
+        streetNumber = firstPart;
+        // If there are more parts in addr2AddressParts, append them to streetName
+        if (addr2AddressParts.length > 1) {
+           streetName = `${streetName} ${addr2AddressParts.slice(1).join(", ")}`.trim();
+        }
+      } else if (isLocId) {
         streetName = `${streetName} ${extraAddress}`.trim();
       } else {
         streetName = `${streetName} ${extraAddress}`.trim();

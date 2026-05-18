@@ -761,35 +761,59 @@ const PROVINCE_NAME_MAP: Record<string, string> = {
   "santa cruz": "Z",
 };
 
-export function normalizeProvinceCode(shopifyProvince: string): string {
+export function normalizeProvinceCode(shopifyProvince: string, zipCode?: string): string {
   if (!shopifyProvince) return "";
 
   const input = shopifyProvince.trim();
+  let code = "";
 
   // Already a single letter? Return uppercase
-  if (/^[A-Za-z]$/.test(input)) return input.toUpperCase();
+  if (/^[A-Za-z]$/.test(input)) {
+    code = input.toUpperCase();
+  } else {
+    // ISO format "AR-X"? Extract the letter
+    const isoMatch = input.match(/^AR-([A-Za-z])$/i);
+    if (isoMatch) {
+      code = isoMatch[1]!.toUpperCase();
+    } else {
+      // Try name lookup
+      const normalized = input.toLowerCase()
+        .normalize("NFD").replace(/[\u0300-\u036f]/g, ""); // strip accents for matching
+      const normalizedWithAccents = input.toLowerCase();
 
-  // ISO format "AR-X"? Extract the letter
-  const isoMatch = input.match(/^AR-([A-Za-z])$/i);
-  if (isoMatch) return isoMatch[1]!.toUpperCase();
+      // Try with accents first, then without
+      code = PROVINCE_NAME_MAP[normalizedWithAccents]
+        || PROVINCE_NAME_MAP[normalized]
+        || Object.entries(PROVINCE_NAME_MAP).find(
+            ([key]) => normalized.includes(key.normalize("NFD").replace(/[\u0300-\u036f]/g, ""))
+          )?.[1] || "";
+    }
+  }
 
-  // Try name lookup
-  const normalized = input.toLowerCase()
-    .normalize("NFD").replace(/[\u0300-\u036f]/g, ""); // strip accents for matching
-  const normalizedWithAccents = input.toLowerCase();
+  // Fallback to first char
+  if (!code) {
+    console.warn(`[Province] Could not normalize "${shopifyProvince}", using first char`);
+    code = input[0]?.toUpperCase() || "";
+  }
 
-  // Try with accents first, then without
-  const code = PROVINCE_NAME_MAP[normalizedWithAccents]
-    || PROVINCE_NAME_MAP[normalized]
-    || Object.entries(PROVINCE_NAME_MAP).find(
-        ([key]) => normalized.includes(key.normalize("NFD").replace(/[\u0300-\u036f]/g, ""))
-      )?.[1];
+  // --- Auto-Correction Logic based on Postal Code ---
+  if (code && zipCode) {
+    const numericZip = parseInt(zipCode.replace(/\D/g, ""), 10);
+    if (!isNaN(numericZip)) {
+      // Rule 1: User picked CABA (C), but zip code is >= 1500 -> It's Buenos Aires (B)
+      if (code === "C" && numericZip >= 1500) {
+        console.warn(`[Province] Auto-correcting CABA to Buenos Aires (CP: ${numericZip})`);
+        return "B";
+      }
+      // Rule 2: User picked Buenos Aires (B), but zip code is between 1000 and 1499 -> It's CABA (C)
+      if (code === "B" && numericZip >= 1000 && numericZip <= 1499) {
+        console.warn(`[Province] Auto-correcting Buenos Aires to CABA (CP: ${numericZip})`);
+        return "C";
+      }
+    }
+  }
 
-  if (code) return code;
-
-  // Last resort: if it's 2+ chars, try first char
-  console.warn(`[Province] Could not normalize "${shopifyProvince}", using first char`);
-  return input[0]?.toUpperCase() || "";
+  return code;
 }
 
 // ---------------------------------------------------------------------------
@@ -905,7 +929,7 @@ export function buildShipmentRequest(
   );
 
   const cleanedZip = cleanPostalCode(input.recipient.zip);
-  const cleanedProvince = normalizeProvinceCode(input.recipient.provinceCode);
+  const cleanedProvince = normalizeProvinceCode(input.recipient.provinceCode, cleanedZip);
   const finalObservations = buildObservations(input.recipient.address2, observations);
 
   console.log(

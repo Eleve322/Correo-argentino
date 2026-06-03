@@ -879,9 +879,9 @@ export interface ShopifyToShipmentInput {
     provinceCode: string;
     zip: string;
   };
-  /** Weight in grams */
-  weightGrams: number;
-  /** Dimensions in cm */
+  /** Line items for calc */
+  lineItems?: { title: string; quantity: number }[];
+  weightGrams?: number;
   dimensions?: { height: number; width: number; length: number };
   /** Declared value in ARS */
   declaredValue: number;
@@ -914,7 +914,7 @@ export function buildShipmentRequest(
   const phone = parseArgentinePhone(input.recipient.phone || "");
 
   // 3. Estimate dimensions if not provided
-  const dims = input.dimensions ?? estimateDimensionsFromWeight(input.weightGrams, input.itemCount || 1);
+  const { weightGrams, dimensions: dims } = input.lineItems ? calculatePackageAndWeight(input.lineItems) : { weightGrams: input.weightGrams || 500, dimensions: input.dimensions || {height:10,width:20,length:30} };
 
   // 4. Build observation text (address2 instructions + phone as backup)
   const observationParts: string[] = [];
@@ -973,7 +973,7 @@ export function buildShipmentRequest(
         provinceCode: cleanedProvince,
         postalCode: cleanedZip,
       },
-      weight: Math.max(1, Math.round(input.weightGrams)),
+      weight: Math.max(1, Math.round(weightGrams)),
       declaredValue: Math.round(input.declaredValue * 100) / 100,
       height: dims.height,
       length: dims.length,
@@ -1018,3 +1018,75 @@ function estimateDimensionsFromWeight(
 }
 
 
+
+export function calculatePackageAndWeight(lineItems: { title: string; quantity: number }[]) {
+  let zapatillas = 0;
+  let buzos = 0;
+  let pantalones = 0;
+  let remeras = 0;
+  let gorras = 0;
+  let accesorios = 0;
+  let weightGrams = 0;
+
+  for (const item of lineItems) {
+    const title = item.title.toLowerCase();
+    const qty = item.quantity;
+
+    if (title.includes('zapatilla') || title.includes('borcego') || title.includes('botín') || title.includes('bota')) {
+      zapatillas += qty;
+      weightGrams += qty * (title.includes('borcego') ? 1600 : 800);
+    } else if (title.includes('buzo') || title.includes('campera') || title.includes('mochila') || title.includes('sweater')) {
+      buzos += qty;
+      weightGrams += qty * (title.includes('mochila') ? 650 : 550);
+    } else if (title.includes('pantalon') || title.includes('pantalón') || title.includes('short') || title.includes('bermuda') || title.includes('jean')) {
+      pantalones += qty;
+      weightGrams += qty * 400;
+    } else if (title.includes('remera') || title.includes('chomba') || title.includes('musculosa') || title.includes('camisa') || title.includes('top')) {
+      remeras += qty;
+      weightGrams += qty * 200;
+    } else if (title.includes('gorra') || title.includes('piluso') || title.includes('sombrero')) {
+      gorras += qty;
+      weightGrams += qty * 90;
+    } else {
+      accesorios += qty;
+      weightGrams += qty * 60;
+    }
+  }
+
+  if (weightGrams === 0) weightGrams = 100;
+
+  const totalClothes = remeras + (pantalones * 2) + (buzos * 4);
+  let dims = { height: 3, width: 18, length: 25 }; 
+
+  if (zapatillas >= 3) {
+    dims = { height: 28, width: 39, length: 49 }; 
+  } else if (zapatillas === 2) {
+    dims = { height: 23, width: 26, length: 37 }; 
+  } else if (zapatillas === 1) {
+    if (totalClothes >= 4 || gorras > 0) {
+      dims = { height: 23, width: 26, length: 37 }; 
+    } else {
+      dims = { height: 9, width: 23, length: 35 }; 
+    }
+  } else {
+    if (gorras > 0) {
+      if (totalClothes === 0 && accesorios === 0) {
+        dims = { height: 20, width: 20, length: 20 }; 
+      } else {
+        dims = { height: 9, width: 23, length: 35 }; 
+      }
+    } else {
+      if (totalClothes > 6) {
+        dims = { height: 23, width: 26, length: 37 }; 
+      } else if (totalClothes > 4) {
+        dims = { height: 9, width: 23, length: 35 }; 
+      } else if (totalClothes > 1) {
+        dims = { height: 3, width: 24, length: 29 }; 
+      } else {
+        dims = { height: 3, width: 18, length: 25 }; 
+      }
+    }
+  }
+
+  return { weightGrams, dimensions: dims };
+}

@@ -1,16 +1,16 @@
-// ============================================================================
+﻿// ============================================================================
 // POST /api/shipping/return
 // Generate a return shipment in MiCorreo
-// Swaps sender/recipient: customer sends → store receives
+// Swaps sender/recipient: customer sends â†’ store receives
 // Customer drops off at nearest branch, store gets it at home address
 // ============================================================================
 
 import { NextResponse } from "next/server";
-import { importShipment, getAgencies } from "@/lib/micorreo";
+import { importShipment, getAgencies, calculatePackageAndWeight } from "@/lib/micorreo";
 import { shopifyAdminFetch } from "@/lib/shopify-admin";
 import type { MiCorreoShipmentRequest } from "@/lib/micorreo-types";
 
-// Province name → code mapping
+// Province name â†’ code mapping
 const PROVINCE_CODE_MAP: Record<string, string> = {
   "buenos aires": "B",
   "capital federal": "C",
@@ -144,7 +144,7 @@ export async function POST(request: Request) {
       console.warn("Failed to find agency for return:", err);
     }
 
-    // 3. Build RETURN shipment: customer → store
+    // 3. Build RETURN shipment: customer â†’ store
     // Parse store address
     const storeStreet = process.env.SENDER_STREET || "";
     const storeNumber = process.env.SENDER_STREET_NUMBER || "";
@@ -155,9 +155,8 @@ export async function POST(request: Request) {
     const custStreetNumber = custAddrMatch ? custAddrMatch[2] : "S/N";
 
     // Estimate weight
-    const totalItems = order.lineItems.edges.reduce((s, li) => s + li.node.quantity, 0);
-    const estimatedWeight = Math.max(totalItems * 800, 500);
-    const dims = estimateDimensions(estimatedWeight);
+    const lineItems = order.lineItems.edges.map(li => ({ title: li.node.title, quantity: li.node.quantity }));
+    const { weightGrams, dimensions: dims } = calculatePackageAndWeight(lineItems);
 
     const returnShipment: Omit<MiCorreoShipmentRequest, "customerId"> = {
       extOrderId: `DEV-${order.name.replace("#", "")}`,
@@ -200,7 +199,7 @@ export async function POST(request: Request) {
           provinceCode: process.env.SENDER_STATE || "",
           postalCode: process.env.SENDER_ZIPCODE || "",
         },
-        weight: estimatedWeight,
+        weight: weightGrams,
         declaredValue: Math.round(parseFloat(order.totalPriceSet.shopMoney.amount) * 100) / 100,
         height: dims.height,
         length: dims.length,
@@ -217,7 +216,7 @@ export async function POST(request: Request) {
       returnOrderId: `DEV-${order.name.replace("#", "")}`,
       nearestAgency: nearestAgencyCode,
       createdAt: result.createdAt,
-      message: `Etiqueta de devolución generada para ${order.name}`,
+      message: `Etiqueta de devoluciÃ³n generada para ${order.name}`,
     });
   } catch (error) {
     console.error("Return shipment error:", error);
@@ -228,3 +227,4 @@ export async function POST(request: Request) {
     );
   }
 }
+

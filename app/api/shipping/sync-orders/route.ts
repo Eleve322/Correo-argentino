@@ -179,7 +179,7 @@ export async function POST(request: Request) {
         let agencyCode: string | undefined;
         if (deliveryType === "S") {
           const codeMatch = shippingCode.match(
-            /correo-argentino-sucursal-(?:clÃ¡sico-|clasico-)?(.+)/i
+            /correo-argentino-sucursal-(?:clásico-|clasico-)?(.+)/i
           );
           agencyCode = codeMatch?.[1];
         }
@@ -256,4 +256,5 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Sync failed", details: message }, { status: 500 });
   }
 }
+
 

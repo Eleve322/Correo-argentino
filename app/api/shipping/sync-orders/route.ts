@@ -1,4 +1,4 @@
-// ============================================================================
+﻿// ============================================================================
 // POST /api/shipping/sync-orders
 // Manually sync today's Correo Argentino orders into MiCorreo
 // Used to catch up on orders that the webhook missed
@@ -27,7 +27,7 @@ export async function POST(request: Request) {
     sinceDate.setDate(sinceDate.getDate() - daysBack);
     const sinceISO = sinceDate.toISOString();
 
-    console.log(`🔄 Syncing orders since ${sinceISO}...`);
+    console.log(`ðŸ”„ Syncing orders since ${sinceISO}...`);
 
     // 2. Fetch recent UNFULFILLED + PAID orders from Shopify via GraphQL
     // If exactOrderName is provided, query specifically for that order bypassing dates
@@ -148,7 +148,7 @@ export async function POST(request: Request) {
       );
 
       // Also check note for import marker
-      const noteImported = order.note?.includes("Correo Argentino - Envío importado");
+      const noteImported = order.note?.includes("Correo Argentino - EnvÃ­o importado");
 
       if (!forceReimport && (alreadyImported || noteImported)) {
         results.push({
@@ -179,7 +179,7 @@ export async function POST(request: Request) {
         let agencyCode: string | undefined;
         if (deliveryType === "S") {
           const codeMatch = shippingCode.match(
-            /correo-argentino-sucursal-(?:clásico-|clasico-)?(.+)/i
+            /correo-argentino-sucursal-(?:clÃ¡sico-|clasico-)?(.+)/i
           );
           agencyCode = codeMatch?.[1];
         }
@@ -221,7 +221,7 @@ export async function POST(request: Request) {
           const notePrefix = order.note ? `${order.note}\n` : "";
           await updateOrderNote(
             numericId,
-            `${notePrefix}📦 Correo Argentino - Envío importado (${result.createdAt})`
+            `${notePrefix}ðŸ“¦ Correo Argentino - EnvÃ­o importado (${result.createdAt})`
           );
         } catch {
           // Non-critical
@@ -233,7 +233,7 @@ export async function POST(request: Request) {
           reason: `Imported at ${result.createdAt}`,
         });
 
-        console.log(`✅ Imported ${order.name}`);
+        console.log(`âœ… Imported ${order.name}`);
       } catch (error) {
         const msg = error instanceof Error ? error.message : "Unknown error";
         results.push({
@@ -241,7 +241,7 @@ export async function POST(request: Request) {
           status: "error",
           reason: msg,
         });
-        console.error(`❌ Failed to import ${order.name}: ${msg}`);
+        console.error(`âŒ Failed to import ${order.name}: ${msg}`);
       }
     }
 
@@ -256,3 +256,4 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Sync failed", details: message }, { status: 500 });
   }
 }
+

@@ -20,7 +20,14 @@ export async function POST(request: Request) {
     const daysBack = body.daysBack || 1;
     const forceReimport = body.force === true;
     const selectedOrderIds: string[] | undefined = body.orderIds;
-    const exactOrderName: string | undefined = body.exactOrderName;
+    const exactOrderNameInput: string | undefined = body.exactOrderName;
+    let exactOrderName = exactOrderNameInput;
+    let orderSuffix = "";
+    if (exactOrderNameInput && exactOrderNameInput.includes("-")) {
+      const parts = exactOrderNameInput.split("-");
+      orderSuffix = "-" + parts.slice(1).join("-");
+      exactOrderName = parts[0];
+    }
 
     // 1. Calculate date range
     const sinceDate = new Date();
@@ -143,6 +150,12 @@ export async function POST(request: Request) {
 
     for (const order of ordersToSync) {
       // Check if already imported via metafield (skip if force=true)
+      const financialStatus = (order as any).displayFinancialStatus || "";
+      if (exactOrderNameInput && (financialStatus === "PENDING" || financialStatus === "PARTIALLY_PAID")) {
+        results.push({ orderName: order.name, status: "error", reason: "Pedido pendiente de pago" });
+        continue;
+      }
+
       const alreadyImported = order.metafields.edges.some(
         (mf) => mf.node.namespace === "correo_argentino" && mf.node.key === "imported_at"
       );
@@ -192,11 +205,12 @@ export async function POST(request: Request) {
         const estimatedWeight = Math.max(totalItems * 400, 200); // ~400g per item (conservative avg)
 
         const addr = order.shippingAddress;
+        const nameWithPhone = addr.phone ? `${addr.firstName} ${addr.lastName} CEL ${addr.phone}`.trim() : `${addr.firstName} ${addr.lastName}`.trim();
         const shipmentData = buildShipmentRequest({
-          orderName: order.name,
+          orderName: order.name + orderSuffix,
           orderId: order.id.split("/").pop() || "",
           recipient: {
-            name: `${addr.firstName} ${addr.lastName}`.trim(),
+            name: nameWithPhone,
             email: order.email,
             phone: addr.phone || "",
             address1: addr.address1,

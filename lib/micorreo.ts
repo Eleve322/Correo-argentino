@@ -1,6 +1,6 @@
-// ============================================================================
-// MiCorreo v1 — API Client
-// Correo Argentino · https://api.correoargentino.com.ar/micorreo/v1
+﻿// ============================================================================
+// MiCorreo v1 â€” API Client
+// Correo Argentino Â· https://api.correoargentino.com.ar/micorreo/v1
 // ============================================================================
 
 import type {
@@ -39,7 +39,7 @@ function getConfig() {
 }
 
 // ---------------------------------------------------------------------------
-// JWT Token Management — Auto-refresh with in-memory cache
+// JWT Token Management â€” Auto-refresh with in-memory cache
 // ---------------------------------------------------------------------------
 
 let cachedToken: string | null = null;
@@ -355,7 +355,7 @@ export async function importShipment(
       address: {
         ...data.shipping.address,
         floor: data.shipping.address.floor?.slice(0, 3),
-        // apartment = "Observaciones" in MiCorreo — keep full text
+        // apartment = "Observaciones" in MiCorreo â€” keep full text
       },
     },
   };
@@ -431,15 +431,15 @@ const AREA_CODES_3 = [
  *   - "54 261 3897785"
  *   - "0261-4551234"
  *   - "261 4551234"
- *   - "15 4551234" (local mobile without area code — returns empty areaCode)
+ *   - "15 4551234" (local mobile without area code â€” returns empty areaCode)
  *
  * Output:
  *   - areaCode: "261" (sin 0)
  *   - subscriberNumber: "2697483" (sin 15)
  *
  * MiCorreo fields:
- *   - "Cód. Área (sin 0)" → areaCode
- *   - "Celular (sin 15)" → subscriberNumber
+ *   - "CÃ³d. Ãrea (sin 0)" â†’ areaCode
+ *   - "Celular (sin 15)" â†’ subscriberNumber
  */
 export function parseArgentinePhone(rawPhone: string): {
   areaCode: string;
@@ -471,7 +471,7 @@ export function parseArgentinePhone(rawPhone: string): {
 
   // 5. Remove "15" mobile prefix if it appears after area code
   //    "15" is always 2 digits and the subscriber part that follows is 8 digits
-  //    But we need to detect it carefully — only remove if number is too long
+  //    But we need to detect it carefully â€” only remove if number is too long
 
   // 6. Try to identify area code
   let areaCode = "";
@@ -520,7 +520,7 @@ export function parseArgentinePhone(rawPhone: string): {
 }
 
 // ---------------------------------------------------------------------------
-// Helper: Smart address parsing for Shopify → MiCorreo
+// Helper: Smart address parsing for Shopify â†’ MiCorreo
 // ---------------------------------------------------------------------------
 
 /**
@@ -528,8 +528,8 @@ export function parseArgentinePhone(rawPhone: string): {
  * Case-insensitive.
  */
 const OBSERVATION_PATTERNS = [
-  /port[oó]n\s+(negro|blanco|gris|marr[oó]n|verde|rojo|grande|chico)/i,
-  /casa\s+(de\s+)?atr[aá]s/i,
+  /port[oÃ³]n\s+(negro|blanco|gris|marr[oÃ³]n|verde|rojo|grande|chico)/i,
+  /casa\s+(de\s+)?atr[aÃ¡]s/i,
   /timbre/i,
   /llamar/i,
   /golpear/i,
@@ -553,11 +553,11 @@ const ADDRESS_PART_PATTERNS = [
  * Smart address parser that handles messy Shopify address inputs.
  *
  * Cases handled:
- *   1. "Lateral Paso 2000" → street="Lateral Paso", number="2000"
- *   2. "Country Altos de la Ribera" (no number) → street="Country Altos de la Ribera", number="" (NO fake 0)
- *   3. address2="Lote 23" → becomes part of the street: "Country Altos de la Ribera Lote 23"
- *   4. address2="portón negro" → goes to observations
- *   5. "Calle Severo Del Castillo 0" → detects fake 0, street="Calle Severo Del Castillo", number=""
+ *   1. "Lateral Paso 2000" â†’ street="Lateral Paso", number="2000"
+ *   2. "Country Altos de la Ribera" (no number) â†’ street="Country Altos de la Ribera", number="" (NO fake 0)
+ *   3. address2="Lote 23" â†’ becomes part of the street: "Country Altos de la Ribera Lote 23"
+ *   4. address2="portÃ³n negro" â†’ goes to observations
+ *   5. "Calle Severo Del Castillo 0" â†’ detects fake 0, street="Calle Severo Del Castillo", number=""
  */
 export function parseShopifyAddress(
   address1: string,
@@ -594,7 +594,7 @@ export function parseShopifyAddress(
         } else if (part.length > 40) {
           addr2Observations.push(part);
         } else {
-          // Short text without numbers — could be "Depto 3B" or "Barrio Norte"
+          // Short text without numbers â€” could be "Depto 3B" or "Barrio Norte"
           addr2AddressParts.push(part);
         }
       }
@@ -607,7 +607,7 @@ export function parseShopifyAddress(
   let extraObs = "";
 
   // Match: "Street Name 1234" and possibly some trailing text like ", Barrio Norte"
-  const streetMatch = addr1.match(/^(.+?)\s+(?:Nro\s*|N°\s*|#\s*)?(\d+(?:\s*(?:bis|[a-z]))?(?:\s*[-\/]\s*\w+)?)(?:[\s,]+(.*))?$/i);
+  const streetMatch = addr1.match(/^(.+?)\s+(?:Nro\s*|NÂ°\s*|#\s*)?(\d+(?:\s*(?:bis|[a-z]))?(?:\s*[-\/]\s*\w+)?)(?:[\s,]+(.*))?$/i);
 
   if (streetMatch) {
     streetName = streetMatch[1]!.trim();
@@ -626,7 +626,7 @@ export function parseShopifyAddress(
 
   // Fallback for explicitly written "S/N"
   if (!streetNumber) {
-    const snMatch = addr1.match(/^(.+?)\s+(s\/n|sn|sin numero|sin número)(?:[\s,]+(.*))?$/i);
+    const snMatch = addr1.match(/^(.+?)\s+(s\/n|sn|sin numero|sin nÃºmero)(?:[\s,]+(.*))?$/i);
     if (snMatch) {
       streetName = snMatch[1]!.trim();
       streetNumber = "S/N";
@@ -685,11 +685,11 @@ export function parseShopifyAddress(
  * or just "2000".
  *
  * Examples:
- *   "S2000ELL" → "2000"
- *   "B1640FRE" → "1640"
- *   "C1425" → "1425"
- *   "1640" → "1640"
- *   "B 1640 FRE" → "1640"
+ *   "S2000ELL" â†’ "2000"
+ *   "B1640FRE" â†’ "1640"
+ *   "C1425" â†’ "1425"
+ *   "1640" â†’ "1640"
+ *   "B 1640 FRE" â†’ "1640"
  */
 export function cleanPostalCode(rawZip: string): string {
   if (!rawZip) return "";
@@ -705,24 +705,24 @@ export function cleanPostalCode(rawZip: string): string {
 }
 
 // ---------------------------------------------------------------------------
-// Helper: Normalize Shopify province code → MiCorreo province code
+// Helper: Normalize Shopify province code â†’ MiCorreo province code
 // ---------------------------------------------------------------------------
 
 /**
  * Shopify sends province codes in various formats:
  *   - Full ISO: "AR-B", "AR-C"
  *   - Just letter: "B", "C"
- *   - Full name: "Buenos Aires", "Ciudad Autónoma de Buenos Aires"
+ *   - Full name: "Buenos Aires", "Ciudad AutÃ³noma de Buenos Aires"
  *   - Shopify internal: "Buenos Aires" (could be province OR CABA)
  *
  * MiCorreo expects a single letter: "B" for Pcia. de Buenos Aires,
  * "C" for Capital Federal (CABA).
  *
  * IMPORTANT: Shopify uses "Buenos Aires" for the PROVINCE (not CABA).
- * CABA is "Ciudad Autónoma de Buenos Aires" in Shopify.
+ * CABA is "Ciudad AutÃ³noma de Buenos Aires" in Shopify.
  */
 const PROVINCE_NAME_MAP: Record<string, string> = {
-  // Full names → single letter
+  // Full names â†’ single letter
   "salta": "A",
   "buenos aires": "B",
   "provincia de buenos aires": "B",
@@ -730,12 +730,12 @@ const PROVINCE_NAME_MAP: Record<string, string> = {
   "pcia. de buenos aires": "B",
   "gba": "B",
   "ciudad autonoma de buenos aires": "C",
-  "ciudad autónoma de buenos aires": "C",
+  "ciudad autÃ³noma de buenos aires": "C",
   "capital federal": "C",
   "caba": "C",
   "san luis": "D",
   "entre rios": "E",
-  "entre ríos": "E",
+  "entre rÃ­os": "E",
   "la rioja": "F",
   "santiago del estero": "G",
   "chaco": "H",
@@ -746,17 +746,17 @@ const PROVINCE_NAME_MAP: Record<string, string> = {
   "misiones": "N",
   "formosa": "P",
   "neuquen": "Q",
-  "neuquén": "Q",
+  "neuquÃ©n": "Q",
   "rio negro": "R",
-  "río negro": "R",
+  "rÃ­o negro": "R",
   "santa fe": "S",
   "tucuman": "T",
-  "tucumán": "T",
+  "tucumÃ¡n": "T",
   "chubut": "U",
   "tierra del fuego": "V",
   "corrientes": "W",
   "cordoba": "X",
-  "córdoba": "X",
+  "cÃ³rdoba": "X",
   "jujuy": "Y",
   "santa cruz": "Z",
 };
@@ -834,16 +834,16 @@ export function normalizeProvinceCode(shopifyProvince: string, zipCode?: string)
  *
  * Example:
  *   address2 = "M 9 C 3 Barrio Ujemvi"
- *   → observations in MiCorreo = "M 9 C 3 Barrio Ujemvi"
+ *   â†’ observations in MiCorreo = "M 9 C 3 Barrio Ujemvi"
  *
- *   address2 = "Lote 23, portón negro"
- *   → "Lote 23" went to streetName, "portón negro" is in parsedObs
- *   → observations = "portón negro" (Lote 23 already in street)
+ *   address2 = "Lote 23, portÃ³n negro"
+ *   â†’ "Lote 23" went to streetName, "portÃ³n negro" is in parsedObs
+ *   â†’ observations = "portÃ³n negro" (Lote 23 already in street)
  */
 function buildObservations(rawAddress2?: string, parsedObservations?: string): string {
   const parts: string[] = [];
 
-  // Always include the full address2 if it exists — safety net
+  // Always include the full address2 if it exists â€” safety net
   const addr2 = (rawAddress2 || "").trim();
   if (addr2) {
     parts.push(addr2);
@@ -921,11 +921,11 @@ export function buildShipmentRequest(
   if (observations) observationParts.push(observations);
 
   console.log(
-    `[Address] "${input.recipient.address1}" + "${input.recipient.address2 || ""}" → ` +
+    `[Address] "${input.recipient.address1}" + "${input.recipient.address2 || ""}" â†’ ` +
     `street="${streetName}" num="${streetNumber}" obs="${observations}"`
   );
   console.log(
-    `[Phone] "${input.recipient.phone}" → area="${phone.areaCode}" num="${phone.subscriberNumber}"`
+    `[Phone] "${input.recipient.phone}" â†’ area="${phone.areaCode}" num="${phone.subscriberNumber}"`
   );
 
   const cleanedZip = cleanPostalCode(input.recipient.zip);
@@ -933,10 +933,10 @@ export function buildShipmentRequest(
   const finalObservations = buildObservations(input.recipient.address2, observations);
 
   console.log(
-    `[PostalCode] "${input.recipient.zip}" → "${cleanedZip}"`
+    `[PostalCode] "${input.recipient.zip}" â†’ "${cleanedZip}"`
   );
   console.log(
-    `[Province] "${input.recipient.provinceCode}" → "${cleanedProvince}"`
+    `[Province] "${input.recipient.provinceCode}" â†’ "${cleanedProvince}"`
   );
 
   return {
@@ -947,7 +947,7 @@ export function buildShipmentRequest(
       phone: process.env.SENDER_PHONE || null,
       cellPhone: null,
       email: process.env.SENDER_EMAIL || null,
-      // DO NOT include originAddress — MiCorreo interprets it as "Pickup" request
+      // DO NOT include originAddress â€” MiCorreo interprets it as "Pickup" request
       // Without originAddress, MiCorreo uses the account's default (Suc. Martinez)
     },
     recipient: {
@@ -997,7 +997,7 @@ function estimateDimensionsFromWeight(
 ): { height: number; width: number; length: number } {
   const avgWeight = itemCount > 0 ? weightGrams / itemCount : weightGrams;
 
-  // === CLOTHING / ACCESSORIES (≤400g per item) ===
+  // === CLOTHING / ACCESSORIES (â‰¤400g per item) ===
   if (avgWeight <= 400) {
     if (weightGrams <= 200) return { height: 3, width: 15, length: 20 };
     if (itemCount <= 1)     return { height: 4, width: 25, length: 30 };
@@ -1016,3 +1016,4 @@ function estimateDimensionsFromWeight(
   if (itemCount <= 1) return { height: 13, width: 25, length: 35 };
   return                     { height: 18, width: 30, length: 38 };
 }
+

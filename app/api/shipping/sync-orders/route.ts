@@ -149,6 +149,13 @@ export async function POST(request: Request) {
     const results: SyncResult[] = [];
 
     for (const order of ordersToSync) {
+      // Skip ON_HOLD orders
+      const fulfillmentStatus = order.displayFulfillmentStatus || "";
+      if (fulfillmentStatus === "ON_HOLD") {
+        results.push({ orderName: order.name, status: "skipped", reason: "Order is ON_HOLD" });
+        continue;
+      }
+
       // Check if already imported via metafield (skip if force=true)
       const financialStatus = (order as any).displayFinancialStatus || "";
       if (exactOrderNameInput && (financialStatus === "PENDING" || financialStatus === "PARTIALLY_PAID")) {

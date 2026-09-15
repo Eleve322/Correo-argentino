@@ -87,11 +87,17 @@ function findClosestAgencies(
 }
 
 function agencyLabel(agency: MiCorreoAgency): string {
-  const street = agency.location?.address?.streetName || "";
-  const number = agency.location?.address?.streetNumber || "";
-  const locality = agency.location?.address?.locality || "";
-  const addr = street ? `${street} ${number}`.trim() : locality;
-  return `Suc. ${agency.name}${addr ? ` (${addr})` : ""}`;
+  const street = agency.location?.address?.streetName?.trim() || "";
+  const number = agency.location?.address?.streetNumber?.trim() || "";
+  // Keep the agency identifiable if the API does not provide a street address.
+  const address = street ? `${street} ${number}`.trim() : agency.name;
+  const formattedAddress = address.toLowerCase().replace(/\p{L}+/gu, (word, offset) => {
+    if (offset > 0 && ["de", "del", "la", "las", "los", "el", "y"].includes(word)) {
+      return word;
+    }
+    return word.charAt(0).toUpperCase() + word.slice(1);
+  });
+  return `suc. ${formattedAddress}`;
 }
 
 /**
@@ -221,7 +227,7 @@ export async function POST(request: Request) {
           if (isHomeDelivery) {
             // Home delivery: single rate
             rates.push({
-              service_name: `ENVÍO A DOMICILIO — correo argentino`,
+              service_name: `ENVÍO A DOMICILIO — Correo Argentino`,
               service_code: `correo-argentino-domicilio`,
               total_price: priceInCents,
               currency: currency || "ARS",
@@ -231,7 +237,7 @@ export async function POST(request: Request) {
             // Branch pickup: one rate per closest agency
             for (const agency of closestAgencies) {
               rates.push({
-                service_name: `RETIRO EN SUCURSAL — correo argentino — ${agencyLabel(agency).toLowerCase()}`,
+                service_name: `RETIRO EN SUCURSAL — Correo Argentino — ${agencyLabel(agency)}`,
                 service_code: `correo-argentino-sucursal-${agency.code}`,
                 total_price: priceInCents,
                 currency: currency || "ARS",
@@ -241,7 +247,7 @@ export async function POST(request: Request) {
           } else {
             // No agencies found: generic branch rate
             rates.push({
-              service_name: `RETIRO EN SUCURSAL — correo argentino`,
+              service_name: `RETIRO EN SUCURSAL — Correo Argentino`,
               service_code: `correo-argentino-sucursal`,
               total_price: priceInCents,
               currency: currency || "ARS",

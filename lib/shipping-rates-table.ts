@@ -152,13 +152,13 @@ export function getFixedRates(
 
   const rates = [
     {
-      service: "ENVÍO A DOMICILIO — correo argentino",
+      service: "ENVÍO A DOMICILIO — Correo Argentino",
       serviceCode: "correo-argentino-domicilio",
       price: homeRate.price,
       deliveryDays: homeRate.deliveryDays,
     },
     {
-      service: "RETIRO EN SUCURSAL — correo argentino",
+      service: "RETIRO EN SUCURSAL — Correo Argentino",
       serviceCode: "correo-argentino-sucursal",
       price: Math.round(homeRate.price * 0.75), // 25% cheaper for branch pickup
       deliveryDays: homeRate.deliveryDays,

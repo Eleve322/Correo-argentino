@@ -221,7 +221,7 @@ export async function POST(request: Request) {
           if (isHomeDelivery) {
             // Home delivery: single rate
             rates.push({
-              service_name: `Envío a domicilio — Correo Argentino`,
+              service_name: `ENVÍO A DOMICILIO — correo argentino`,
               service_code: `correo-argentino-domicilio`,
               total_price: priceInCents,
               currency: currency || "ARS",
@@ -231,7 +231,7 @@ export async function POST(request: Request) {
             // Branch pickup: one rate per closest agency
             for (const agency of closestAgencies) {
               rates.push({
-                service_name: `Retiro en sucursal — Correo Argentino — ${agencyLabel(agency)}`,
+                service_name: `RETIRO EN SUCURSAL — correo argentino — ${agencyLabel(agency).toLowerCase()}`,
                 service_code: `correo-argentino-sucursal-${agency.code}`,
                 total_price: priceInCents,
                 currency: currency || "ARS",
@@ -241,7 +241,7 @@ export async function POST(request: Request) {
           } else {
             // No agencies found: generic branch rate
             rates.push({
-              service_name: `Retiro en sucursal — Correo Argentino`,
+              service_name: `RETIRO EN SUCURSAL — correo argentino`,
               service_code: `correo-argentino-sucursal`,
               total_price: priceInCents,
               currency: currency || "ARS",

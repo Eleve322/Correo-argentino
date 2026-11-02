@@ -35,7 +35,16 @@ type PendingOrder = {
   itemCount: number;
   synced: boolean;
   syncedAt?: string;
+  branchLabel?: string | null;
+  branchNames?: string[];
 };
+
+function branchBadgeColors(label: string): { bg: string; fg: string } {
+  if (label.startsWith("ROJO")) return { bg: "#5a1a1a", fg: "#ff8a8a" };
+  if (label === "AMARILLO") return { bg: "#4a3f10", fg: "#ffd95a" };
+  if (label === "VERDE") return { bg: "#1a4a2a", fg: "#7ee2a0" };
+  return { bg: "#333", fg: "#ccc" }; // SIN CLASIFICAR
+}
 
 type PendingResult = {
   total: number;
@@ -321,7 +330,25 @@ export default function Dashboard() {
                     />
                     <div style={styles.orderInfo}>
                       <div style={styles.orderHeader}>
-                        <span style={styles.orderName}>{order.name}</span>
+                        <span style={styles.orderName}>
+                          {order.name}
+                          {order.branchLabel && (
+                            <span
+                              title={order.branchNames?.join(" · ")}
+                              style={{
+                                marginLeft: "8px",
+                                padding: "2px 8px",
+                                borderRadius: "6px",
+                                fontSize: "11px",
+                                fontWeight: 700,
+                                backgroundColor: branchBadgeColors(order.branchLabel).bg,
+                                color: branchBadgeColors(order.branchLabel).fg,
+                              }}
+                            >
+                              {order.branchLabel}
+                            </span>
+                          )}
+                        </span>
                         <span style={styles.orderPrice}>{formatPrice(order.totalPrice)}</span>
                       </div>
                       <div style={styles.orderMeta}>

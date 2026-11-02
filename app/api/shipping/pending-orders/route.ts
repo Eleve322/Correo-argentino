@@ -5,6 +5,51 @@
 
 import { NextResponse } from "next/server";
 import { shopifyAdminFetch } from "@/lib/shopify-admin";
+import { orderBranchLabel } from "@/lib/branch-status";
+
+/**
+ * Busca las ubicaciones (sucursales) de cada pedido. Va en una consulta
+ * separada a propósito: si falla (por ejemplo, falta el permiso
+ * read_merchant_managed_fulfillment_orders), la lista de pendientes se sigue
+ * mostrando igual, solo que sin rótulo.
+ */
+async function fetchOrderLocations(orderIds: string[]): Promise<Map<string, string[]>> {
+  const result = new Map<string, string[]>();
+  if (orderIds.length === 0) return result;
+
+  try {
+    const query = `query ($ids: [ID!]!) {
+      nodes(ids: $ids) {
+        ... on Order {
+          id
+          fulfillmentOrders(first: 20) {
+            edges { node { status assignedLocation { name } } }
+          }
+        }
+      }
+    }`;
+    type Node = {
+      id?: string;
+      fulfillmentOrders?: {
+        edges: { node: { status: string; assignedLocation: { name: string | null } | null } }[];
+      };
+    } | null;
+
+    const data = await shopifyAdminFetch<{ nodes: Node[] }>(query, { ids: orderIds });
+    for (const node of data.nodes) {
+      if (!node?.id || !node.fulfillmentOrders) continue;
+      const names = node.fulfillmentOrders.edges
+        .map((e) => e.node)
+        .filter((fo) => fo.status !== "CANCELLED" && fo.status !== "CLOSED")
+        .map((fo) => fo.assignedLocation?.name || "")
+        .filter(Boolean);
+      result.set(node.id, names);
+    }
+  } catch (err) {
+    console.warn("[Pending] No se pudieron leer las sucursales de los pedidos:", err);
+  }
+  return result;
+}
 
 export interface PendingOrder {
   id: string;        // Shopify GID
@@ -20,6 +65,9 @@ export interface PendingOrder {
   itemCount: number;
   synced: boolean;
   syncedAt?: string;
+  /** VERDE / AMARILLO / ROJO / "ROJO + VERDE" / SIN CLASIFICAR (solo informativo) */
+  branchLabel?: string | null;
+  branchNames?: string[];
 }
 
 export async function GET(request: Request) {
@@ -132,6 +180,14 @@ export async function GET(request: Request) {
     });
 
     const unsyncedOnly = pendingOrders.filter(o => !o.synced);
+
+    const locations = await fetchOrderLocations(unsyncedOnly.map((o) => o.id));
+    for (const o of unsyncedOnly) {
+      const names = locations.get(o.id);
+      if (!names) continue;
+      o.branchNames = names;
+      o.branchLabel = orderBranchLabel(names);
+    }
 
     return NextResponse.json({
       total: unsyncedOnly.length,

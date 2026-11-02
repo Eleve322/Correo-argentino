@@ -366,6 +366,31 @@ export async function importShipment(
   });
 }
 
+/**
+ * Importa el envío; si MiCorreo lo rechaza y el número de orden lleva rótulo
+ * de sucursal, reintenta una vez con el número de orden original (sin rótulo)
+ * para que el envío nunca se pierda por culpa del rótulo.
+ */
+export async function importShipmentWithLabelFallback(
+  data: Omit<MiCorreoShipmentRequest, "customerId">,
+  plainOrderNumber: string
+): Promise<MiCorreoShipmentResponse> {
+  try {
+    return await importShipment(data);
+  } catch (err) {
+    // Solo si MiCorreo rechazó los datos (no ante cortes de red o timeouts,
+    // para no duplicar un envío que quizás sí se creó).
+    const rejected =
+      err instanceof MiCorreoError && (err.statusCode === 400 || err.statusCode === 422);
+    if (!rejected || !data.orderNumber || data.orderNumber === plainOrderNumber) throw err;
+    console.warn(
+      `[Import] MiCorreo rechazó "${data.orderNumber}", reintento sin rótulo como "${plainOrderNumber}":`,
+      err
+    );
+    return importShipment({ ...data, orderNumber: plainOrderNumber });
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Tracking
 // ---------------------------------------------------------------------------
@@ -891,6 +916,11 @@ export interface ShopifyToShipmentInput {
   agencyCode?: string;
   /** Number of items (for dimension estimation) */
   itemCount?: number;
+  /**
+   * Rótulo de sucursal (VERDE / AMARILLO / ROJO / ...). Se agrega SOLO al
+   * número de orden visible en MiCorreo; extOrderId no cambia.
+   */
+  orderLabel?: string | null;
 }
 
 /**
@@ -941,7 +971,7 @@ export function buildShipmentRequest(
 
   return {
     extOrderId: input.orderName.replace("#", ""),
-    orderNumber: input.orderName,
+    orderNumber: input.orderLabel ? `${input.orderName} ${input.orderLabel}` : input.orderName,
     sender: {
       name: process.env.SENDER_NAME || null,
       phone: process.env.SENDER_PHONE || null,

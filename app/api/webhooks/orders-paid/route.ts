@@ -5,7 +5,8 @@
 // ============================================================================
 
 import { NextResponse } from "next/server";
-import { importShipment, buildShipmentRequest } from "@/lib/micorreo";
+import { importShipmentWithLabelFallback, buildShipmentRequest } from "@/lib/micorreo";
+import { fetchOrderBranchLabel } from "@/lib/order-branches";
 import {
   verifyShopifyWebhook,
   addOrderMetafield,
@@ -96,6 +97,9 @@ export async function POST(request: Request) {
     }
 
     // 7. Build and import shipment to MiCorreo
+    // Rótulo de sucursal (VERDE/AMARILLO/ROJO) para el N° de orden visible.
+    // Si no se puede leer, devuelve null y se importa igual que antes.
+    const orderLabel = await fetchOrderBranchLabel(order.id);
     const addr = order.shipping_address;
     const shipmentData = buildShipmentRequest({
       orderName: order.name,
@@ -115,10 +119,11 @@ export async function POST(request: Request) {
       deliveryType,
       agencyCode,
       itemCount: totalItemCount,
+      orderLabel,
     });
 
     console.log(`Importing shipment for order ${order.name}...`);
-    const result = await importShipment(shipmentData);
+    const result = await importShipmentWithLabelFallback(shipmentData, order.name);
     console.log(`✅ Shipment imported: ${result.createdAt}`);
 
     // 8. Update Shopify order with shipment info

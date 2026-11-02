@@ -5,7 +5,8 @@
 // ============================================================================
 
 import { NextResponse } from "next/server";
-import { importShipment, buildShipmentRequest } from "@/lib/micorreo";
+import { importShipmentWithLabelFallback, buildShipmentRequest } from "@/lib/micorreo";
+import { fetchOrderBranches } from "@/lib/order-branches";
 import { shopifyAdminFetch, addOrderMetafield, updateOrderNote } from "@/lib/shopify-admin";
 
 interface SyncResult {
@@ -148,6 +149,10 @@ export async function POST(request: Request) {
     // 4. Import each one that hasn't been imported yet
     const results: SyncResult[] = [];
 
+    // Rótulos de sucursal (VERDE/AMARILLO/ROJO) para el N° de orden visible.
+    // Si falla, el mapa queda vacío y se importa igual que antes.
+    const branches = await fetchOrderBranches(ordersToSync.map((o) => o.id));
+
     for (const order of ordersToSync) {
       // Skip ON_HOLD orders
       const fulfillmentStatus = order.displayFulfillmentStatus || "";
@@ -236,9 +241,13 @@ export async function POST(request: Request) {
           deliveryType,
           agencyCode,
           itemCount: totalItems,
+          orderLabel: branches.get(order.id)?.label ?? null,
         });
 
-        const result = await importShipment(shipmentData);
+        const result = await importShipmentWithLabelFallback(
+          shipmentData,
+          order.name + orderSuffix + forceAppendedSuffix
+        );
 
         // Mark as imported in Shopify
         const numericId = order.id.split("/").pop() || "";

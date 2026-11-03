@@ -129,12 +129,20 @@ export async function POST(request: Request) {
     console.log(`Found ${allOrders.length} unfulfilled+paid orders since ${sinceISO}`);
 
     // 3. Filter to Correo Argentino orders only
-    const caOrders = allOrders.filter((order) =>
-      order.shippingLines.edges.some(
-        (sl) =>
-          sl.node.title.toLowerCase().includes("correo") ||
-          (sl.node.code || "").toLowerCase().includes("correo")
-      )
+    // Al forzar una orden puntual se acepta aunque el envío no diga "Correo":
+    // pasa cuando la app no devolvió tarifa en el checkout y Shopify aplicó la
+    // "tarifa de respaldo" (el envío queda como "Envío"). Se importa a domicilio.
+    const forcedName = exactOrderName
+      ? "#" + exactOrderName.trim().replace(/^#/, "")
+      : null;
+    const caOrders = allOrders.filter(
+      (order) =>
+        (forcedName !== null && order.name === forcedName) ||
+        order.shippingLines.edges.some(
+          (sl) =>
+            sl.node.title.toLowerCase().includes("correo") ||
+            (sl.node.code || "").toLowerCase().includes("correo")
+        )
     );
 
     console.log(`${caOrders.length} use Correo Argentino shipping`);

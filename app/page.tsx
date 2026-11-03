@@ -240,6 +240,114 @@ export default function Dashboard() {
           </div>
         </header>
 
+        {/* Force Sync Section */}
+        <section style={styles.card}>
+          <h2 style={styles.cardTitle}>🚀 Forzar sincronización de orden</h2>
+          <p style={styles.cardDesc}>
+            Ingresá el número de la orden de Shopify (ej: 202114) para forzar su importación manualmente (útil para órdenes viejas o con errores).
+          </p>
+
+          <div style={styles.inputRow}>
+            <input
+              type="text"
+              placeholder="Número de orden (ej: 202114)"
+              value={forceSyncInput}
+              onChange={(e) => setForceSyncInput(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && handleForceSync()}
+              style={styles.input}
+            />
+            <button
+              onClick={handleForceSync}
+              disabled={forceSyncStatus === "loading" || !forceSyncInput.trim()}
+              style={{
+                ...styles.btnPrimary,
+                backgroundColor: "#2e2e2e",
+                color: "#e0e0e0",
+                opacity: forceSyncStatus === "loading" || !forceSyncInput.trim() ? 0.6 : 1,
+              }}
+            >
+              {forceSyncStatus === "loading" ? "Procesando..." : "Forzar importación"}
+            </button>
+          </div>
+
+          {forceSyncStatus === "success" && forceSyncResult && !forceSyncResult.error && (
+            <div style={styles.syncResults}>
+              {forceSyncResult.results?.map((r, i) => (
+                <div key={i} style={styles.syncRow}>
+                  <span style={{
+                    ...styles.syncBadge,
+                    backgroundColor: r.status === "imported" ? "#d4edda" : r.status === "skipped" ? "#e2e3e5" : "#f8d7da",
+                    color: r.status === "imported" ? "#155724" : r.status === "skipped" ? "#383d41" : "#721c24",
+                  }}>
+                    {r.status === "imported" ? "✅" : r.status === "skipped" ? "⏭️" : "❌"} {r.orderName}
+                  </span>
+                  <span style={styles.syncReason}>{r.reason}</span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {forceSyncStatus === "error" && (
+            <div style={styles.errorBox}>
+              <strong>❌ Error</strong>
+              <p>{forceSyncResult?.details || forceSyncResult?.error}</p>
+            </div>
+          )}
+        </section>
+
+        {/* Return Label Section */}
+        <section style={styles.card}>
+          <h2 style={styles.cardTitle}>🔄 Generar etiqueta de devolución</h2>
+          <p style={styles.cardDesc}>
+            Ingresá el ID numérico de la orden de Shopify (ej: 7535024079091).
+            Se invierte el envío: el cliente despacha en sucursal → vos recibís a domicilio.
+          </p>
+
+          <div style={styles.inputRow}>
+            <input
+              type="text"
+              placeholder="ID de orden (ej: 7535024079091)"
+              value={orderInput}
+              onChange={(e) => setOrderInput(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && handleReturn()}
+              style={styles.input}
+            />
+            <button
+              onClick={handleReturn}
+              disabled={returnStatus === "loading" || !orderInput.trim()}
+              style={{
+                ...styles.btnPrimary,
+                opacity: returnStatus === "loading" || !orderInput.trim() ? 0.6 : 1,
+              }}
+            >
+              {returnStatus === "loading" ? "Generando..." : "Generar devolución"}
+            </button>
+          </div>
+
+          {returnStatus === "success" && returnResult?.success && (
+            <div style={styles.successBox}>
+              <strong>✅ Etiqueta generada</strong>
+              <div style={styles.resultGrid}>
+                <span>Orden:</span><span>{returnResult.orderName}</span>
+                <span>ID devolución:</span><span>{returnResult.returnOrderId}</span>
+                <span>Sucursal:</span><span>{returnResult.nearestAgency || "Auto"}</span>
+                <span>Fecha:</span><span>{returnResult.createdAt}</span>
+              </div>
+              <p style={styles.hint}>Aparecerá en MiCorreo → Pendientes</p>
+            </div>
+          )}
+
+          {returnStatus === "error" && (
+            <div style={styles.errorBox}>
+              <strong>❌ Error</strong>
+              <p>{returnResult?.details || returnResult?.error}</p>
+              <button onClick={() => setReturnStatus("idle")} style={styles.btnSmall}>
+                Reintentar
+              </button>
+            </div>
+          )}
+        </section>
+
         {/* Pending Orders Section */}
         <section style={styles.card}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
@@ -396,114 +504,6 @@ export default function Dashboard() {
             <div style={styles.errorBox}>
               <strong>❌ Error</strong>
               <p>{syncResult.details || syncResult.error}</p>
-            </div>
-          )}
-        </section>
-
-        {/* Return Label Section */}
-        <section style={styles.card}>
-          <h2 style={styles.cardTitle}>🔄 Generar etiqueta de devolución</h2>
-          <p style={styles.cardDesc}>
-            Ingresá el ID numérico de la orden de Shopify (ej: 7535024079091).
-            Se invierte el envío: el cliente despacha en sucursal → vos recibís a domicilio.
-          </p>
-
-          <div style={styles.inputRow}>
-            <input
-              type="text"
-              placeholder="ID de orden (ej: 7535024079091)"
-              value={orderInput}
-              onChange={(e) => setOrderInput(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && handleReturn()}
-              style={styles.input}
-            />
-            <button
-              onClick={handleReturn}
-              disabled={returnStatus === "loading" || !orderInput.trim()}
-              style={{
-                ...styles.btnPrimary,
-                opacity: returnStatus === "loading" || !orderInput.trim() ? 0.6 : 1,
-              }}
-            >
-              {returnStatus === "loading" ? "Generando..." : "Generar devolución"}
-            </button>
-          </div>
-
-          {returnStatus === "success" && returnResult?.success && (
-            <div style={styles.successBox}>
-              <strong>✅ Etiqueta generada</strong>
-              <div style={styles.resultGrid}>
-                <span>Orden:</span><span>{returnResult.orderName}</span>
-                <span>ID devolución:</span><span>{returnResult.returnOrderId}</span>
-                <span>Sucursal:</span><span>{returnResult.nearestAgency || "Auto"}</span>
-                <span>Fecha:</span><span>{returnResult.createdAt}</span>
-              </div>
-              <p style={styles.hint}>Aparecerá en MiCorreo → Pendientes</p>
-            </div>
-          )}
-
-          {returnStatus === "error" && (
-            <div style={styles.errorBox}>
-              <strong>❌ Error</strong>
-              <p>{returnResult?.details || returnResult?.error}</p>
-              <button onClick={() => setReturnStatus("idle")} style={styles.btnSmall}>
-                Reintentar
-              </button>
-            </div>
-          )}
-        </section>
-
-        {/* Force Sync Section */}
-        <section style={styles.card}>
-          <h2 style={styles.cardTitle}>🚀 Forzar sincronización de orden</h2>
-          <p style={styles.cardDesc}>
-            Ingresá el número de la orden de Shopify (ej: 202114) para forzar su importación manualmente (útil para órdenes viejas o con errores).
-          </p>
-
-          <div style={styles.inputRow}>
-            <input
-              type="text"
-              placeholder="Número de orden (ej: 202114)"
-              value={forceSyncInput}
-              onChange={(e) => setForceSyncInput(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && handleForceSync()}
-              style={styles.input}
-            />
-            <button
-              onClick={handleForceSync}
-              disabled={forceSyncStatus === "loading" || !forceSyncInput.trim()}
-              style={{
-                ...styles.btnPrimary,
-                backgroundColor: "#2e2e2e",
-                color: "#e0e0e0",
-                opacity: forceSyncStatus === "loading" || !forceSyncInput.trim() ? 0.6 : 1,
-              }}
-            >
-              {forceSyncStatus === "loading" ? "Procesando..." : "Forzar importación"}
-            </button>
-          </div>
-
-          {forceSyncStatus === "success" && forceSyncResult && !forceSyncResult.error && (
-            <div style={styles.syncResults}>
-              {forceSyncResult.results?.map((r, i) => (
-                <div key={i} style={styles.syncRow}>
-                  <span style={{
-                    ...styles.syncBadge,
-                    backgroundColor: r.status === "imported" ? "#d4edda" : r.status === "skipped" ? "#e2e3e5" : "#f8d7da",
-                    color: r.status === "imported" ? "#155724" : r.status === "skipped" ? "#383d41" : "#721c24",
-                  }}>
-                    {r.status === "imported" ? "✅" : r.status === "skipped" ? "⏭️" : "❌"} {r.orderName}
-                  </span>
-                  <span style={styles.syncReason}>{r.reason}</span>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {forceSyncStatus === "error" && (
-            <div style={styles.errorBox}>
-              <strong>❌ Error</strong>
-              <p>{forceSyncResult?.details || forceSyncResult?.error}</p>
             </div>
           )}
         </section>
